@@ -18,7 +18,7 @@ static JavaVM *g_ptrGlobalJVM;
 static JNIEnv *g_ptrGlobalJniEnv;
 HopsEventStreamingTimer *g_EventStreamingTimer;
 
-JNIEXPORT void JNICALL Java_se_sics_hop_metadata_ndb_JniNdbEventStreaming_closeEventAPISession(JNIEnv *env,
+JNIEXPORT void JNICALL Java_io_hops_metadata_ndb_JniNdbEventStreaming_closeEventAPISession(JNIEnv *env,
 		jobject thisObj) {
 	int l_iThreadArraySize = 0;
 	pthread_t *l_pThradArray = HopsEventAPI::Instance()->GetPthreadIdArray(
@@ -39,7 +39,7 @@ JNIEXPORT void JNICALL Java_se_sics_hop_metadata_ndb_JniNdbEventStreaming_closeE
 	delete HopsEventAPI::Instance();
 }
 
-JNIEXPORT void JNICALL Java_se_sics_hop_metadata_ndb_JniNdbEventStreaming_startEventAPISession(JNIEnv *env,
+JNIEXPORT void JNICALL Java_io_hops_metadata_ndb_JniNdbEventStreaming_startEventAPISession(JNIEnv *env,
 		jobject thisObj) {
 
 	int status = env->GetJavaVM(&g_ptrGlobalJVM);

@@ -61,9 +61,12 @@ private:
 	int PreprocessJavaObjectsWithoutReferenceTable(vector<jobject> & _vecJObject);
 	void ProcessAndFillTheData(HopsReturnObject *_ptrReturnObject,
 			Uint64 _uTransactionId);
+	void ProcessAndFillBatchData(HopsReturnObject *_ptrReturnObject,Uint64 _uTransactionId);
 	void ClearDataStructures();
 	void PrintJNIPlainMessage(int _iCategory, const char *_pzMessage);
-
+    int SingleThreadBDWithRefTable();
+    void ClearBatchMemory();
+    int SingleThreadBDWithOutRefTable();
 	ThreadToken *m_ptrThreadToken;
 	HopsJNIDispatcher *m_ptrNeighbourDispatcher;
 	HopsEventQueueFrame *m_ptrJavaObjectDispatcherQ;
@@ -76,6 +79,7 @@ private:
 	jmethodID m_mdMultiThreadCallBackMethod;
 	jmethodID m_mdBuildCompositeMethod;
 	jmethodID m_mdSingleThreadCallBackMethod;
+	jmethodID m_mdResetMethod;	
 	jclass m_jniClassGlobalRef;
 	jobject m_newCallBackObj;
 
@@ -101,6 +105,14 @@ private:
 	std::map<std::string, std::map<int, Uint64> > m_mapOfSortingObjects;
 	std::map<std::string, std::map<int, Uint64> >::iterator mapOfSortingItr;
 
+	std::map<std::string,std::vector<int> > m_mapOfPendingEvents;
+	std::map<std::string,std::vector<int> >::iterator m_itrPendingEvent;
+
+
+	std::map<std::string, std::map <int,std::vector<HopsReturnObject* > > > m_mapOfBatchTransactionObjects;
+	std::map<std::string, std::map <int,std::vector<HopsReturnObject* > > >::iterator m_mapOfBTObjectsItr;
+
+
 	std::map<std::string, const char *> mapTableNameToFunctionSig;
 	std::map<std::string, std::string> mapTableNameFunctionName;
 	std::map<std::string, std::string> mapJavaContainerBuild;
@@ -114,6 +126,9 @@ private:
 
 	char m_zSingleThreadCallBackMethod[400];
 	char m_zSingleThreadCallBackMethodSig[400];
+	
+        char m_zResetMethod[400];
+	char m_zResetMethodSig[400];
 
 	char m_zMultiThreadCallBackMethodName[400];
 	char m_zMultiThreadCallBackMethodSig[400];
@@ -125,3 +140,5 @@ private:
 };
 
 #endif /* HOPSEVENTPROCESSOR_H_ */
+
+

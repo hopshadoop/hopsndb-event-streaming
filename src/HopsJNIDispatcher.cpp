@@ -7,14 +7,17 @@
 // Description : Dispatcher thread is processing and dispatching the objects to java
 //============================================================================
 
-#include <sys/time.h>
-#include <exception>
-#include <pthread.h>
-#include <limits.h>
-#include <stdlib.h>
-#include <fstream>
 #include "../include/HopsJNIDispatcher.h"
-#include "../include/HopsEventThreadData.h"
+
+#include <jni_md.h>
+#include <stdlib.h>
+#include <cstdio>
+#include <cstring>
+#include <iostream>
+#include <map>
+#include <string>
+#include <utility>
+#include <algorithm>
 
 #define EVENT_API_CONFIG "EventAPIConfig.ini"
 
@@ -25,7 +28,9 @@
 
 using namespace hops::utl;
 using namespace cnf;
-ofstream m_ofStream("dump.txt");
+
+ofstream m_ofStream;
+int globalTransCounter = 0;
 HopsJNIDispatcher::HopsJNIDispatcher() {
 	m_ptrJavaObjectDispatcherQ = NULL;
 	m_jvm = NULL;
@@ -52,8 +57,11 @@ HopsJNIDispatcher::HopsJNIDispatcher() {
 	m_ullPreviousDispatchTime = 0;
 	m_iInternalGCIIndex = 0;
 	m_threadid = 0;
+	m_ofStream.open("/home/sri/dump.txt");
+	m_ofStream << "##GCI,Number of transaction, distpatch time" << endl;
 
 }
+
 HopsJNIDispatcher::~HopsJNIDispatcher() {
 	std::cout << "[HopsJNIDispatcher] Deallocating the memory now "
 			<< std::endl;
@@ -197,6 +205,25 @@ void HopsJNIDispatcher::WarmUpJavaObjectConfiguration() {
 				"[HopsJNIDispatcher][INFO] ########### Callback method signature : %s\n",
 				m_zSingleThreadCallBackMethodSig);
 	}
+
+        memset(l_zConfigReaderArray, 0, sizeof(l_zConfigReaderArray));
+	sprintf(l_zConfigReaderArray, "RESET_METHOD");
+	strcpy(l_zValues, cFile.GetValue(l_zConfigReaderArray));
+	HopsStringTokenizer l_oListSepResetMethod(l_zValues, '|'); // this separator helps to extract the load deviation
+
+	memset(m_zResetMethod, 0,
+			sizeof(m_zResetMethod));
+	memset(m_zResetMethodSig, 0,
+			sizeof(m_zResetMethodSig));
+
+	strcpy(m_zResetMethod,
+			l_oListSepResetMethod.GetTokenAt(0));
+	strcpy(m_zResetMethodSig,
+			l_oListSepResetMethod.GetTokenAt(1));
+
+
+
+
 	jclass l_callbackClass = m_ptrJNI->FindClass(m_zCallBackClassName);
 
 	if (l_callbackClass == NULL) {
@@ -273,9 +300,9 @@ void HopsJNIDispatcher::WarmUpJavaObjectConfiguration() {
 	HopsStringTokenizer l_oListSepMTBuildCallBack(l_zValues, '|');
 
 	memset(m_zMultiThreadBuildCallBackMethod, 0,
-			sizeof(m_zSingleThreadCallBackMethod));
+			sizeof(m_zMultiThreadBuildCallBackMethod));
 	memset(m_zMultiThreadBuildClassBackMethodSig, 0,
-			sizeof(m_zSingleThreadCallBackMethodSig));
+			sizeof(m_zMultiThreadBuildClassBackMethodSig));
 
 	strcpy(m_zMultiThreadBuildCallBackMethod,
 			l_oListSepMTBuildCallBack.GetTokenAt(0));
@@ -290,9 +317,9 @@ void HopsJNIDispatcher::WarmUpJavaObjectConfiguration() {
 	HopsStringTokenizer l_oListSepMTCallBack(l_zValues, '|'); // this separator helps to extract the load deviation
 
 	memset(m_zMultiThreadCallBackMethodName, 0,
-			sizeof(m_zSingleThreadCallBackMethod));
+			sizeof(m_zMultiThreadCallBackMethodName));
 	memset(m_zMultiThreadCallBackMethodSig, 0,
-			sizeof(m_zSingleThreadCallBackMethodSig));
+			sizeof(m_zMultiThreadCallBackMethodSig));
 
 	strcpy(m_zMultiThreadCallBackMethodName,
 			l_oListSepMTCallBack.GetTokenAt(0));
@@ -316,9 +343,16 @@ void HopsJNIDispatcher::WarmUpJavaObjectConfiguration() {
 	m_mdSingleThreadCallBackMethod = m_ptrJNI->GetMethodID(m_jniClassGlobalRef,
 			m_zSingleThreadCallBackMethod, m_zSingleThreadCallBackMethodSig);
 
+        m_mdResetMethod = m_ptrJNI->GetMethodID(m_jniClassGlobalRef,
+			m_zResetMethod, m_zResetMethodSig);
+
 	if (m_mdSingleThreadCallBackMethod == NULL) {
 		PrintJNIPlainMessage(2,
 				"Exception occurred in finding Single thread java method");
+	}
+        if (m_mdResetMethod == NULL) {
+		PrintJNIPlainMessage(2,
+				"Exception occurred in finding reset java method");
 	}
 	if (m_bIsPrintEnabled) {
 		printf(
@@ -408,9 +442,9 @@ int HopsJNIDispatcher::processQ() {
 				}
 				int l_iTransactionCount = MultiThreadedDispatch(
 						l_vecJavaTempObject);
-				unsigned long long l_FinishTime =
-						m_ptrSleepTimer->GetEpochTime();
-				printf("%d,%lld\n", l_iTransactionCount, l_FinishTime);
+				//unsigned long long l_FinishTime =
+				//		m_ptrSleepTimer->GetEpochTime();
+				//printf("%d,%lld\n", l_iTransactionCount, l_FinishTime);
 				m_ptrNeighbourDispatcher->m_ptrThreadToken->SendSignal();
 
 			} else {
@@ -418,22 +452,23 @@ int HopsJNIDispatcher::processQ() {
 						m_ptrSleepTimer->GetEpochTime();
 				int l_iTransactionCount = 0;
 				if (m_bIsReferenceTableProvided) {
-					l_iTransactionCount = SingleThreadDispatch();
+					l_iTransactionCount = SingleThreadBDWithRefTable();
 				} else {
-					l_iTransactionCount =
-							SingleThreadDispatchWithoutReferenceTable();
+					l_iTransactionCount = SingleThreadBDWithOutRefTable();
 				}
 				unsigned long long duration = l_FinishTime
 						- m_ullPreviousDispatchTime;
-				printf("%d,%lld\n", l_iTransactionCount, duration);
-				// m_ofStream<<l_iTransactionCount<<"|"<<duration<<endl;
+				//printf("%d,%lld\n", l_iTransactionCount, duration);
+				m_ofStream << globalTransCounter << "," << l_iTransactionCount
+						<< "," << duration << endl;
+				++globalTransCounter;
 				m_ullPreviousDispatchTime = l_FinishTime;
 			}
 			ClearDataStructures();
 			m_iInternalGCIIndex = _pMsg->GetGCIIndexValue();
 		}
 
-		ProcessAndFillTheData(_pMsg->GetReturnObject(),
+		ProcessAndFillBatchData(_pMsg->GetReturnObject(),
 				_pMsg->getTransactionId());
 
 		delete _pMsg;
@@ -454,15 +489,72 @@ void HopsJNIDispatcher::CleanUpUnwantedObjectMemory() {
 			m_mapOfReturnObjectItr != m_mapOfReturnObject.end();
 			++m_mapOfReturnObjectItr) {
 		if ((int) m_mapOfReturnObjectItr->second.size() != 0) {
-			printf(
-					"[HopsJNIDispatcher][INFO] ########### Can't dispatch objects, because, we have an objects from other tables but not from reference table ############# \n");
+			//	printf(
+			//			"[HopsJNIDispatcher][INFO] ########### Can't dispatch objects, because, we have an objects from other tables but not from reference table ############# \n");
 			for (int i = 0; i < (int) m_mapOfReturnObjectItr->second.size();
 					++i) {
-				printf("[JNIDispatcher] Table name : %s \n",
-						m_mapOfReturnObjectItr->second[i]->GetTableName());
+				//printf("[JNIDispatcher] Table name : %s \n",
+				//		m_mapOfReturnObjectItr->second[i]->GetTableName());
 				delete m_mapOfReturnObjectItr->second[i];
 			}
 			m_mapOfReturnObjectItr->second.clear();
+		}
+	}
+}
+
+void HopsJNIDispatcher::ProcessAndFillBatchData(
+		HopsReturnObject *_ptrReturnObject, Uint64 _uTransactionId) {
+
+	// we need to make sure first value of each streaming object is a pending event id and second value is rmnodeid.
+	// this can be done through the configuration files we are passing
+	int l_iPendingEventId =
+			_ptrReturnObject->m_listOfNdbValues[0].getInt32Value();
+	std::string l_sRMNodeId =
+			_ptrReturnObject->m_listOfNdbValues[1].getCharValue();
+
+	m_mapOfBTObjectsItr = m_mapOfBatchTransactionObjects.find(l_sRMNodeId);
+
+	if (m_mapOfBTObjectsItr != m_mapOfBatchTransactionObjects.end()) {
+		// so we found the existing rm node, check the pending id and update corresponding object pointers
+		// first check whether we have any existing pending event id
+		map<int, std::vector<HopsReturnObject*> >::iterator innerItr =
+				m_mapOfBTObjectsItr->second.find(l_iPendingEventId);
+		if (innerItr != m_mapOfBTObjectsItr->second.end()) {
+			// so we already have pending event, just update it
+			innerItr->second.push_back(_ptrReturnObject);
+		} else {
+			std::vector<HopsReturnObject*> arrayOfReturnObject;
+			arrayOfReturnObject.push_back(_ptrReturnObject);
+			m_mapOfBTObjectsItr->second.insert(
+					std::make_pair<int, std::vector<HopsReturnObject *> >(
+							l_iPendingEventId, arrayOfReturnObject));
+		}
+	} else {
+		//create new one
+		std::map<int, std::vector<HopsReturnObject*> > l_mapInnerOrderMap;
+		std::vector<HopsReturnObject*> arrayOfReturnObject;
+		arrayOfReturnObject.push_back(_ptrReturnObject);
+		l_mapInnerOrderMap.insert(
+				std::make_pair<int, std::vector<HopsReturnObject *> >(
+						l_iPendingEventId, arrayOfReturnObject));
+		m_mapOfBatchTransactionObjects.insert(
+				std::make_pair<std::string,
+						std::map<int, std::vector<HopsReturnObject*> > >(
+						l_sRMNodeId, l_mapInnerOrderMap));
+	}
+
+	if (m_bIsReferenceTableProvided) {
+		if (strcmp(_ptrReturnObject->GetTableName(), m_zReferenceTable) == 0) {
+			m_itrPendingEvent = m_mapOfPendingEvents.find(l_sRMNodeId);
+			if (m_itrPendingEvent != m_mapOfPendingEvents.end()) {
+				m_itrPendingEvent->second.push_back(l_iPendingEventId);
+			} else {
+				std::vector<int> arrayOfPendingEvents;
+				arrayOfPendingEvents.push_back(l_iPendingEventId);
+				m_mapOfPendingEvents.insert(
+						std::make_pair<std::string, std::vector<int> >(
+								l_sRMNodeId, arrayOfPendingEvents));
+			}
 		}
 	}
 }
@@ -541,6 +633,127 @@ int HopsJNIDispatcher::SingleThreadDispatchWithoutReferenceTable() {
 
 	return GlobalTotalTransactionCount;
 
+}
+
+void HopsJNIDispatcher::ClearBatchMemory() {
+
+	m_mapOfBTObjectsItr = m_mapOfBatchTransactionObjects.begin();
+	for (; m_mapOfBTObjectsItr != m_mapOfBatchTransactionObjects.end();
+			++m_mapOfBTObjectsItr) {
+		std::map<int, std::vector<HopsReturnObject*> >::iterator l_innermapItr =
+				m_mapOfBTObjectsItr->second.begin();
+		// check whether we have any objects inside the vector array.
+		for (; l_innermapItr != m_mapOfBTObjectsItr->second.end();
+				++l_innermapItr) {
+			if (l_innermapItr->second.size()) {
+				//unwanted objects. remove them
+				for (int i = 0; i < (int) l_innermapItr->second.size(); ++i) {
+					delete l_innermapItr->second[i];
+				}
+			}
+			l_innermapItr->second.clear();
+		}
+	}
+	// objects are successfully dispatcher, clear the map for next fresh batch of events.
+	m_mapOfBatchTransactionObjects.clear();
+}
+int HopsJNIDispatcher::SingleThreadBDWithOutRefTable() {
+	int GlobalTotalTransactionCount = 0;
+
+	m_mapOfBTObjectsItr = m_mapOfBatchTransactionObjects.begin();
+	for (; m_mapOfBTObjectsItr != m_mapOfBatchTransactionObjects.end();
+			++m_mapOfBTObjectsItr) {
+		std::map<int, std::vector<HopsReturnObject*> >::iterator l_innermapItr =
+				m_mapOfBTObjectsItr->second.begin();
+
+		for (; l_innermapItr != m_mapOfBTObjectsItr->second.end();
+				++l_innermapItr) {
+			// go through all the pending event and dispatch , this will avoid unnecessary dispatch
+			++GlobalTotalTransactionCount;
+			int l_iPendingEventId = l_innermapItr->first;
+			for (int j = 0; j < (int) vecListJavaMethod.size(); ++j) {
+				m_ptrJNI->CallVoidMethod(m_newCallBackObj,
+						vecListJavaMethod[j]);
+			}
+			for (int i = 0; i < (int) l_innermapItr->second.size(); ++i) {
+				string l_sTableName(l_innermapItr->second[i]->GetTableName());
+			//	printf("table name - %s - pending id - %d \n",l_sTableName.c_str(), l_iPendingEventId);
+				int l_iPos = m_TablePositions[l_sTableName];
+
+				m_ptrHopsObjects[l_iPos]->BuildHopJavaObject(
+						l_innermapItr->second[i]->m_listOfNdbValues);
+				m_ptrHopsObjects[l_iPos]->FireNewClassMethod();
+				delete l_innermapItr->second[i];
+			}
+
+			m_ptrJNI->CallVoidMethod(m_newCallBackObj,
+					m_mdSingleThreadCallBackMethod);
+
+			l_innermapItr->second.clear();
+		}
+
+		m_mapOfBTObjectsItr->second.clear();
+
+	}
+	ClearBatchMemory();
+	return GlobalTotalTransactionCount;
+}
+int HopsJNIDispatcher::SingleThreadBDWithRefTable() {
+
+	int GlobalTotalTransactionCount = 0;
+
+	m_mapOfBTObjectsItr = m_mapOfBatchTransactionObjects.begin();
+	for (; m_mapOfBTObjectsItr != m_mapOfBatchTransactionObjects.end();
+			++m_mapOfBTObjectsItr) {
+		std::map<int, std::vector<HopsReturnObject*> >::iterator l_innermapItr =
+				m_mapOfBTObjectsItr->second.begin();
+
+		m_itrPendingEvent = m_mapOfPendingEvents.find(
+				m_mapOfBTObjectsItr->first);
+		if (m_itrPendingEvent != m_mapOfPendingEvents.end()) {
+			// so we found the rm node , lets dispatch
+			// now sort the pending events
+			   std::sort(m_itrPendingEvent->second.begin(),m_itrPendingEvent->second.end());
+			for (int i = 0; i < (int) m_itrPendingEvent->second.size(); ++i) {
+				// go through all the pending event and dispatch , this will avoid unnecessary dispatch
+				int l_iPendingEventId = m_itrPendingEvent->second[i];
+				// now lets search the pending event id in the main map,
+
+				l_innermapItr = m_mapOfBTObjectsItr->second.find(
+						l_iPendingEventId);
+				if (l_innermapItr != m_mapOfBTObjectsItr->second.end()) {
+					++GlobalTotalTransactionCount;
+					int l_iPendingEventId = l_innermapItr->first;
+					for (int j = 0; j < (int) vecListJavaMethod.size(); ++j) {
+						m_ptrJNI->CallVoidMethod(m_newCallBackObj,
+								vecListJavaMethod[j]);
+					}
+					for (int i = 0; i < (int) l_innermapItr->second.size();
+							++i) {
+						string l_sTableName(
+								l_innermapItr->second[i]->GetTableName());
+						int l_iPos = m_TablePositions[l_sTableName];
+						m_ptrHopsObjects[l_iPos]->BuildHopJavaObject(
+								l_innermapItr->second[i]->m_listOfNdbValues);
+						m_ptrHopsObjects[l_iPos]->FireNewClassMethod();
+						delete l_innermapItr->second[i];
+					}
+
+					m_ptrJNI->CallVoidMethod(m_newCallBackObj,
+							m_mdSingleThreadCallBackMethod);
+                                        //lets call the reset method here to clear the objects, so we can prepare the objects for next round
+					m_ptrJNI->CallVoidMethod(m_newCallBackObj,
+							m_mdResetMethod);
+
+					l_innermapItr->second.clear();
+				}
+			}
+		}
+
+		m_mapOfBTObjectsItr->second.clear();
+	}
+	ClearBatchMemory();
+	return GlobalTotalTransactionCount;
 }
 
 int HopsJNIDispatcher::SingleThreadDispatch() {
@@ -691,3 +904,4 @@ int HopsJNIDispatcher::MultiThreadedDispatch(vector<jobject> &classObjects) {
 	return l_iClassObjects;
 
 }
+
