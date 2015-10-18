@@ -47,6 +47,7 @@ public:
 	static void * Run(void * _pProcessor);
 	static pthread_t StartEventThread();
 
+	void dropEvents();
 	int EventSubscription(Ndb* myNdb, const char *eventName,
 			const char *eventTableName, const char **eventColumnNames,
 			const int noEventColumnNames, bool merge_events);
@@ -109,6 +110,7 @@ private:
 	QueueSizeCondition ** m_ptrQueueSizeCondition;
 
 	int m_iTotalProcessingThreads;
+	vector<char *> m_eventNames;
 
 };
 

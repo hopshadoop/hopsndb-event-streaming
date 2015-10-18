@@ -21,6 +21,7 @@
 #include "NdbApi.hpp"
 #include "HopsConfigReader.h"
 
+using namespace cnf;
 using namespace hops::utl::que;
 using namespace hops::utl;
 using namespace hopsjni;
@@ -36,7 +37,7 @@ public:
 	pthread_t StartEventProcessor(
 			HopsLoadSimulationJNIDispatcher *_ptrHopsJNIDispatcher,
 			HopsLoadSimulationJNIDispatcher *_ptrFriendDispatcher,
-			ThreadToken *_ptrThreadToken);
+			ThreadToken *_ptrThreadToken,HopsConfigFile *_ptrConf);
 	void StopProcessorThread() {
 		m_bIsIinterrupt = true;
 	}
@@ -89,6 +90,7 @@ private:
 	QueueSizeCondition *m_ptrCondtionLock;
 	HopsEventStreamingTimer *m_ptrSleepTimer;
 	ThreadToken *m_ptrThreadToken;
+	HopsConfigFile *m_ptrConf;
 	HopsLoadSimulationJNIDispatcher *m_ptrNeighbourDispatcher;
 	HopsEventQueueFrame *m_ptrJavaObjectDispatcherQ;
 

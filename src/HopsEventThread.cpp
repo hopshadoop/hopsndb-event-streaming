@@ -21,7 +21,6 @@
 #define MAX_TABLE_NANE_LENGTH 50
 #define UINT_MAX32 0xFFFFFFFFL
 
-#define EVENT_API_CONFIG "EventAPIConfig.ini"
 pthread_t HopsEventThread::m_threadid;
 HopsEventThread* HopsEventThread::m_pInstance = NULL;
 
@@ -42,8 +41,8 @@ HopsEventThread::HopsEventThread() {
 	m_iInternalGCI = 0;
 	m_iMaxEventBufferMemory = 0;
 	m_iGlobalGCIIndexValue = 0;
-	m_iTotalProcessingThreads=0;
-	m_iEventType=0;
+	m_iTotalProcessingThreads = 0;
+	m_iEventType = 0;
 	m_Ndb = NULL;
 	m_pZDatabseName = NULL;
 	m_pzEventTableNameArray = NULL;
@@ -54,8 +53,8 @@ HopsEventThread::HopsEventThread() {
 	m_pNdbRecAttrPrevious = NULL;
 	m_pClusterConnection = NULL;
 	m_pQHolder = NULL;
-	m_ptrQueueSizeCondition=NULL;
-	m_ptrnanoSleepTimer=NULL;
+	m_ptrQueueSizeCondition = NULL;
+	m_ptrnanoSleepTimer = NULL;
 
 }
 
@@ -63,14 +62,14 @@ void HopsEventThread::InintEventThread(
 		Ndb_cluster_connection *_ptrClusterConnection,
 		HopsEventQueueFrame **_ptrQHolder, int _iMaxEventBufferMemory,
 		int _iEventType, QueueSizeCondition ** _ptrCondtionLock,
-		int _iTotalProcessingThread,int _iThreadSingleContainerSize) {
+		int _iTotalProcessingThread, int _iThreadSingleContainerSize) {
 	m_iEventType = _iEventType;
 	m_pClusterConnection = _ptrClusterConnection;
 	m_pQHolder = _ptrQHolder;
 	m_iMaxEventBufferMemory = _iMaxEventBufferMemory;
 	m_ptrQueueSizeCondition = _ptrCondtionLock;
 	m_iTotalProcessingThreads = _iTotalProcessingThread;
-	m_iSingleContainerSize=_iThreadSingleContainerSize;
+	m_iSingleContainerSize = _iThreadSingleContainerSize;
 }
 
 HopsEventThread::~HopsEventThread() {
@@ -153,6 +152,8 @@ void HopsEventThread::setEventColArray(int *_pEventArray,
 void HopsEventThread::subscribeEvents() {
 	m_Ndb = new Ndb(m_pClusterConnection, m_pZDatabseName); // Object representing the database
 	m_Ndb->set_eventbuf_max_alloc(UINT_MAX32); // this is in bytes
+	HopsEventStreamingTimer *l_EventStreamingTimer =
+			new HopsEventStreamingTimer();
 	//UINT_MAX32
 
 //	Ndb::EventBufferMemoryUsage ttl;
@@ -173,8 +174,10 @@ void HopsEventThread::subscribeEvents() {
 	for (int j = 0; j < m_iTotalNoOfTable; ++j) {
 		char l_zEventName[MAX_EVENT_LENGTH];
 		memset(l_zEventName, 0, sizeof(l_zEventName));
-		sprintf(l_zEventName, "S33_s_%d", j);
-		strcpy(m_pzEventNameArray[j], l_zEventName);
+
+		char *l_ptrTimeStamp = l_EventStreamingTimer->GetUniqString();
+		strcpy(m_pzEventNameArray[j], l_ptrTimeStamp);
+		m_eventNames.push_back(l_ptrTimeStamp);
 
 		int l_iNumberOfCol = m_pIntEventArray[j];
 		char *l_zTableName = m_pzEventTableNameArray[j];
@@ -285,7 +288,8 @@ void HopsEventThread::PushDataToOtherThread(NdbEventOperation *_pNdbOperation) {
 		++m_iInternalGCI;
 	}
 	int l_iThreaedIdOffSet = m_iInternalGCI % m_iTotalProcessingThreads;
-	m_ptrQueueSizeCondition[l_iThreaedIdOffSet]->IncreaseQueueSize(m_iSingleContainerSize);
+	m_ptrQueueSizeCondition[l_iThreaedIdOffSet]->IncreaseQueueSize(
+			m_iSingleContainerSize);
 
 	EventThreadData *pEventData = new EventThreadData();
 	pEventData->SetGCIIndexValue(m_iInternalGCI);
@@ -325,6 +329,19 @@ void HopsEventThread::StartThread() {
 
 }
 
+void HopsEventThread::dropEvents() {
+	// when api function called, drop all the events and start again
+	if (m_Ndb != NULL) {
+		// if component restart m_ndb is not null, so drop all the events and subscribe again
+		NdbDictionary::Dictionary *myDict = m_Ndb->getDictionary();
+		for (int i = 0; i < (int) m_eventNames.size(); ++i) {
+			if (myDict->dropEvent(m_eventNames[i]))
+				APIERROR(myDict->getNdbError());
+		}
+	}
+	m_eventNames.clear();
+
+}
 int HopsEventThread::EventSubscription(Ndb* myNdb, const char *eventName,
 		const char *eventTableName, const char **eventColumnNames,
 		const int noEventColumnNames, bool merge_events) {
@@ -332,9 +349,8 @@ int HopsEventThread::EventSubscription(Ndb* myNdb, const char *eventName,
 	if (!myDict)
 		APIERROR(myNdb->getNdbError());
 	const NdbDictionary::Table *table = myDict->getTable(eventTableName);
-	if (!table)
-	{
-		printf("[NdbEventAPI] Table not found - name : %s\n",eventTableName);
+	if (!table) {
+		printf("[NdbEventAPI] Table not found - name : %s\n", eventTableName);
 		APIERROR(myDict->getNdbError());
 	}
 
@@ -384,7 +400,8 @@ int HopsEventThread::EventSubscription(Ndb* myNdb, const char *eventName,
 		if (myDict->createEvent(l_hopEvents))
 			APIERROR(myDict->getNdbError());
 	} else {
-		printf("\033[1;31m [NdbEnetAPI][ERROR]##########  Schema doesn't exist - %s -%s \033[0m\n",
+		printf(
+				"\033[1;31m [NdbEnetAPI][ERROR]##########  Schema doesn't exist - %s -%s \033[0m\n",
 				eventName, eventTableName);
 		APIERROR(myDict->getNdbError());
 	}

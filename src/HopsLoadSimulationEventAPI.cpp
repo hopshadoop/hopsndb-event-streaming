@@ -13,11 +13,8 @@
 #include "../include/HopsLoadSimulation.h"
 using namespace cnf;
 
-#define EVENT_API_CONFIG "EventAPIConfig.ini"
 #define MAX_TABLE_NAME_LENGTH 30
 #define GB 1073741824
-
-
 
 HopsLoadSimulationEventAPI* HopsLoadSimulationEventAPI::m_pInstance = NULL;
 
@@ -33,6 +30,7 @@ HopsLoadSimulationEventAPI::HopsLoadSimulationEventAPI() {
 	m_ptrJavaObjectDispatcherQ = NULL;
 	m_pConditionLock = NULL;
 	m_ptrProcessingQ = NULL;
+	m_ptrLoadSimulationJNIDispatcher=NULL;
 	m_iTotalThreads = 0;
 	m_iMaxEventBufferSize = 0;
 	m_ptrCondtionLock = NULL;
@@ -62,9 +60,8 @@ void HopsLoadSimulationEventAPI::StopAllDispatchingThreads() {
 	}
 }
 
-void HopsLoadSimulationEventAPI::LoadSimulationInitAPI(JavaVM *_ptrJVM) {
+void HopsLoadSimulationEventAPI::LoadSimulationInitAPI(JavaVM *_ptrJVM,HopsConfigFile *_ptrConf) {
 	char **pEventTableNameArray;
-	HopsConfigFile cFile(EVENT_API_CONFIG);
 
 	char l_zConfigReaderArray[1024];
 	char l_zSetOfTables[1024];
@@ -72,8 +69,8 @@ void HopsLoadSimulationEventAPI::LoadSimulationInitAPI(JavaVM *_ptrJVM) {
 	memset(l_zConfigReaderArray, 0, sizeof(l_zConfigReaderArray));
 	memset(l_zSetOfTables, 0, sizeof(l_zSetOfTables));
 
-	m_iTotalThreads = (int) atoi(cFile.GetValue("PROCESSING_THREADS"));
-	double l_dMaxQCapacity = (double) atof(cFile.GetValue("QUEUE_MAX_CAPACITY"));
+	m_iTotalThreads = (int) atoi(_ptrConf->GetValue("PROCESSING_THREADS"));
+	double l_dMaxQCapacity = (double) atof(_ptrConf->GetValue("QUEUE_MAX_CAPACITY"));
 
 	// event receiving thread plus total number of thread
 	m_pthreadArray = new pthread_t[m_iTotalThreads + 1];
@@ -81,7 +78,7 @@ void HopsLoadSimulationEventAPI::LoadSimulationInitAPI(JavaVM *_ptrJVM) {
 	memset(l_zConfigReaderArray, 0, sizeof(l_zConfigReaderArray));
 	memset(l_zSetOfTables, 0, sizeof(l_zSetOfTables));
 	sprintf(l_zConfigReaderArray, "SIMULATION_TABLE_NAMES");
-	strcpy(l_zSetOfTables, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(l_zSetOfTables, _ptrConf->GetValue(l_zConfigReaderArray));
 
 	HopsStringTokenizer l_oTablesSep(l_zSetOfTables, ',');
 
@@ -119,7 +116,7 @@ void HopsLoadSimulationEventAPI::LoadSimulationInitAPI(JavaVM *_ptrJVM) {
 	if (m_iTotalThreads == 1) {
 		m_ptrLoadSimulationJNIDispatcher[0]->SetSingleThread(true);
 		l_pthreadId = m_ptrLoadSimulationJNIDispatcher[0]->StartEventProcessor(
-				m_ptrLoadSimulationJNIDispatcher[0], NULL, NULL);
+				m_ptrLoadSimulationJNIDispatcher[0], NULL, NULL,_ptrConf);
 		m_pthreadArray[0] = l_pthreadId;
 	} else {
 		ThreadToken **l_ptrThreadToken = new ThreadToken *[m_iTotalThreads];
@@ -128,11 +125,11 @@ void HopsLoadSimulationEventAPI::LoadSimulationInitAPI(JavaVM *_ptrJVM) {
 			if (j == m_iTotalThreads - 1) {
 				l_pthreadId = m_ptrLoadSimulationJNIDispatcher[j]->StartEventProcessor(
 						m_ptrLoadSimulationJNIDispatcher[j], m_ptrLoadSimulationJNIDispatcher[0],
-						l_ptrThreadToken[j]);
+						l_ptrThreadToken[j],_ptrConf);
 			} else {
 				l_pthreadId = m_ptrLoadSimulationJNIDispatcher[j]->StartEventProcessor(
 						m_ptrLoadSimulationJNIDispatcher[j], m_ptrLoadSimulationJNIDispatcher[j + 1],
-						l_ptrThreadToken[j]);
+						l_ptrThreadToken[j],_ptrConf);
 			}
 			m_pthreadArray[j] = l_pthreadId;
 			sleep(2);
@@ -146,7 +143,7 @@ void HopsLoadSimulationEventAPI::LoadSimulationInitAPI(JavaVM *_ptrJVM) {
 	sleep(3);
 	HopsLoadSimulation *ptrSimulation = new HopsLoadSimulation();
 	l_pthreadId = ptrSimulation->InitializeHopsSimulationThread(ptrSimulation,
-			m_ptrProcessingQ,m_ptrCondtionLock);
+			m_ptrProcessingQ,m_ptrCondtionLock,_ptrConf);
 
 	m_pthreadArray[m_iTotalThreads] = l_pthreadId;
 

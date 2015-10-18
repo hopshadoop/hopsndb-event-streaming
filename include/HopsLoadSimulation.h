@@ -30,13 +30,14 @@ public:
 	pthread_t InitializeHopsSimulationThread(
 			HopsLoadSimulation * _ptrLoadSimulation,
 			HopsEventQueueFrame **_ptrLoadQ,
-			QueueSizeCondition ** _ptrQueueSizeCondition);
+			QueueSizeCondition ** _ptrQueueSizeCondition,HopsConfigFile *_ptrConf);
 	void StartSimulationThread();
 private:
 	void InitSimulation();
 	HopsEventStreamingTimer *m_ptrnanoSleepTimer;
 	pthread_t m_threadid;
 	HopsEventQueueFrame **m_ptrLoadQ;
+	HopsConfigFile *m_ptrConf;
 	QueueSizeCondition **m_ptrQueueSizeCondtion;
 	HopsEventStreamerMemoryUsage *m_ptrHopsMemoryUsage;
 

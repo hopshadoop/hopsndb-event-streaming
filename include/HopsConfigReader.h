@@ -26,11 +26,9 @@ namespace cnf
 				HopsStringTokenizer(char * zSource, char cDelim);
 				HopsStringTokenizer();
 
-				inline int GetCount()
-				{
+				inline int GetCount(){
 					return (int) vec_tokens.size();
 				}
-				;
 				char * GetTokenAt(int iIndex);
 				int SplitLines(char * zSource);
 			private:
@@ -38,13 +36,10 @@ namespace cnf
 				std::vector<char *> vec_tokens;
 			};
 
-
-
-
 	class HopsConfigFile
 	{
 	public:
-				HopsConfigFile(const char* zConfigFile);
+		HopsConfigFile(const char* zConfigFile);
 		virtual ~HopsConfigFile();
 
 		const char* GetValue(const char* sTag, bool _bNoExit = false);

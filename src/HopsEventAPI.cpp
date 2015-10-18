@@ -11,7 +11,6 @@
 #include "../include/HopsLoadSimulation.h"
 using namespace cnf;
 
-#define EVENT_API_CONFIG "EventAPIConfig.ini"
 #define MAX_TABLE_NAME_LENGTH 50
 #define GB 1073741824
 
@@ -60,9 +59,8 @@ void HopsEventAPI::StopAllDispatchingThreads() {
 		m_ptrJNIDispatcher[i]->StopProcessorThread();
 	}
 }
-void HopsEventAPI::initAPI(JavaVM *_ptrJVM) {
+void HopsEventAPI::initAPI(JavaVM *_ptrJVM,HopsConfigFile *_ptrConf) {
 	char **pEventTableNameArray;
-	HopsConfigFile cFile(EVENT_API_CONFIG);
 
 	char l_zConfigReaderArray[1024];
 	char l_zSetOfTables[1024];
@@ -74,12 +72,12 @@ void HopsEventAPI::initAPI(JavaVM *_ptrJVM) {
 	memset(l_zSetOfTables, 0, sizeof(l_zSetOfTables));
 
 	m_iSingleContainerSize = (int) atoi(
-			cFile.GetValue("SINGLE_CONTAINER_SIZE"));
-	int l_iMaxQCapacity = (int) atoi(cFile.GetValue("QUEUE_MAX_CAPACITY"));
-	m_iTotalThreads = (int) atoi(cFile.GetValue("PROCESSING_THREADS"));
-	m_iMaxEventBufferSize = (int) atoi(cFile.GetValue("MAX_EVENT_BUFFER"));
-	int l_iEventType = (int) atoi(cFile.GetValue("EVENT_TYPE"));
-	int l_iTotalNoOfColumn = (int) atoi(cFile.GetValue("TOTAL_NO_OF_COLUMN"));
+			_ptrConf->GetValue("SINGLE_CONTAINER_SIZE"));
+	int l_iMaxQCapacity = (int) atoi(_ptrConf->GetValue("QUEUE_MAX_CAPACITY"));
+	m_iTotalThreads = (int) atoi(_ptrConf->GetValue("PROCESSING_THREADS"));
+	m_iMaxEventBufferSize = (int) atoi(_ptrConf->GetValue("MAX_EVENT_BUFFER"));
+	int l_iEventType = (int) atoi(_ptrConf->GetValue("EVENT_TYPE"));
+	int l_iTotalNoOfColumn = (int) atoi(_ptrConf->GetValue("TOTAL_NO_OF_COLUMN"));
 
 	// event receiving thread plus total number of thread
 	m_ptrThreadArray = new pthread_t[m_iTotalThreads + 1];
@@ -88,7 +86,7 @@ void HopsEventAPI::initAPI(JavaVM *_ptrJVM) {
 	memset(l_zSetOfTables, 0, sizeof(l_zSetOfTables));
 
 	sprintf(l_zConfigReaderArray, "TABLE_NAMES");
-	strcpy(l_zSetOfTables, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(l_zSetOfTables, _ptrConf->GetValue(l_zConfigReaderArray));
 
 	HopsStringTokenizer l_oTablesSep(l_zSetOfTables, ',');
 
@@ -111,7 +109,7 @@ void HopsEventAPI::initAPI(JavaVM *_ptrJVM) {
 	memset(l_zConfigReaderArray, 0, sizeof(l_zConfigReaderArray));
 
 	sprintf(l_zConfigReaderArray, "EVENT_COL_NAMES");
-	strcpy(l_zSetOfCol, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(l_zSetOfCol, _ptrConf->GetValue(l_zConfigReaderArray));
 
 	HopsStringTokenizer l_oColSep(l_zSetOfCol, '|');
 	int l_iCounter = 0;
@@ -128,15 +126,15 @@ void HopsEventAPI::initAPI(JavaVM *_ptrJVM) {
 
 	memset(l_zConfigReaderArray, 0, sizeof(l_zConfigReaderArray));
 	sprintf(l_zConfigReaderArray, "NDB_CONNECT_STRING");
-	strcpy(l_zNdbConnectionString, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(l_zNdbConnectionString, _ptrConf->GetValue(l_zConfigReaderArray));
 
 	Ndb_cluster_connection *cluster_connection = new Ndb_cluster_connection(
 			l_zNdbConnectionString); // Object representing the cluster
 
 	int l_iNumberOfRetries = (int) atoi(
-			cFile.GetValue("NUMBER_OF_RETRIES_ATTEMPT"));
+			_ptrConf->GetValue("NUMBER_OF_RETRIES_ATTEMPT"));
 	int l_iDelayInSeconds = (int) atoi(
-			cFile.GetValue("RETRY_DELAY_IN_SECONDS"));
+			_ptrConf->GetValue("RETRY_DELAY_IN_SECONDS"));
 
 	int r = cluster_connection->connect(l_iNumberOfRetries, l_iDelayInSeconds,
 			1);
@@ -150,9 +148,9 @@ void HopsEventAPI::initAPI(JavaVM *_ptrJVM) {
 	}
 
 	int l_iTimeoutForFistAlive = (int) atoi(
-			cFile.GetValue("TIMEOUT_FOR_FIRST_ALIVE"));
+			_ptrConf->GetValue("TIMEOUT_FOR_FIRST_ALIVE"));
 	int l_iTimeoutAfterFirstAlive = (int) atoi(
-			cFile.GetValue("TIMEOUT_AFTER_FIRST_ALIVE"));
+			_ptrConf->GetValue("TIMEOUT_AFTER_FIRST_ALIVE"));
 
 	if (cluster_connection->wait_until_ready(l_iTimeoutForFistAlive,
 			l_iTimeoutAfterFirstAlive)) {
@@ -163,7 +161,7 @@ void HopsEventAPI::initAPI(JavaVM *_ptrJVM) {
 
 	memset(l_zConfigReaderArray, 0, sizeof(l_zConfigReaderArray));
 	sprintf(l_zConfigReaderArray, "NDB_DATABASE_NAME");
-	strcpy(l_zNdbDatabaseName, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(l_zNdbDatabaseName, _ptrConf->GetValue(l_zConfigReaderArray));
 
 	m_ptrProcessingQ = new HopsEventQueueFrame *[m_iTotalThreads];
 
@@ -190,7 +188,7 @@ void HopsEventAPI::initAPI(JavaVM *_ptrJVM) {
 	if (m_iTotalThreads == 1) {
 		m_ptrJNIDispatcher[0]->SetSingleThread(true);
 		l_pthreadId = m_ptrJNIDispatcher[0]->StartEventProcessor(
-				m_ptrJNIDispatcher[0], NULL, NULL);
+				m_ptrJNIDispatcher[0], NULL, NULL,_ptrConf);
 		m_ptrThreadArray[0] = l_pthreadId;
 	} else {
 		ThreadToken **l_ptrThreadToken = new ThreadToken *[m_iTotalThreads];
@@ -199,11 +197,11 @@ void HopsEventAPI::initAPI(JavaVM *_ptrJVM) {
 			if (j == m_iTotalThreads - 1) {
 				l_pthreadId = m_ptrJNIDispatcher[j]->StartEventProcessor(
 						m_ptrJNIDispatcher[j], m_ptrJNIDispatcher[0],
-						l_ptrThreadToken[j]);
+						l_ptrThreadToken[j],_ptrConf);
 			} else {
 				l_pthreadId = m_ptrJNIDispatcher[j]->StartEventProcessor(
 						m_ptrJNIDispatcher[j], m_ptrJNIDispatcher[j + 1],
-						l_ptrThreadToken[j]);
+						l_ptrThreadToken[j],_ptrConf);
 			}
 			m_ptrThreadArray[j] = l_pthreadId;
 			// Give some time to attach previous thread and start next one

@@ -24,7 +24,7 @@ class HopsEventAPI {
 public:
 	static HopsEventAPI* Instance();
 	~HopsEventAPI();
-	void initAPI(JavaVM *_ptrJVM);
+	void initAPI(JavaVM *_ptrJVM,HopsConfigFile *_ptrConf);
 	pthread_t * GetPthreadIdArray(int *_ptrSize);
 	void StopAllDispatchingThreads();
 private:

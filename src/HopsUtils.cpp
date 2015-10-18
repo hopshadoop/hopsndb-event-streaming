@@ -51,7 +51,8 @@ HopsEventQueueFrame::~HopsEventQueueFrame() {
 	delete m_ptrIntermediateQueue;
 	delete m_ptrConsumerQueue;
 }
-void HopsEventQueueFrame::AddToProducerQueue(HopsEventDataPacket * _pDataContainer) {
+void HopsEventQueueFrame::AddToProducerQueue(
+		HopsEventDataPacket * _pDataContainer) {
 	m_ptrProducerQueue->PushToQueue(_pDataContainer);
 }
 void HopsEventQueueFrame::AddToProducerQueueWithLock(
@@ -138,7 +139,8 @@ QueueSizeCondition::~QueueSizeCondition() {
 	pthread_mutex_destroy(&m_mutexQueueSize);
 }
 
-void QueueSizeCondition::InitQueueSizeCondition(unsigned long long _iMaxCapcity) {
+void QueueSizeCondition::InitQueueSizeCondition(
+		unsigned long long _iMaxCapcity) {
 	m_iMaxQueueCapacity = _iMaxCapcity;
 }
 
@@ -164,9 +166,8 @@ void QueueSizeCondition::DecreaseQueueSize(unsigned int _iValue) {
 
 }
 
-HopsEventStreamingTimer::HopsEventStreamingTimer()
-{
-	m_iSleepInterval=0;
+HopsEventStreamingTimer::HopsEventStreamingTimer() {
+	m_iSleepInterval = 0;
 }
 HopsEventStreamingTimer::HopsEventStreamingTimer(int _iThreadSleepInterval,
 		bool _isThisMilliSleep) {
@@ -195,6 +196,7 @@ char * HopsEventStreamingTimer::GetCurrentTimeStamp() {
 	return l_ptrBuffer;
 
 }
+
 unsigned long long HopsEventStreamingTimer::GetEpochTime() {
 	struct timeval l_stTimeVal;
 	gettimeofday(&l_stTimeVal, NULL);
@@ -202,6 +204,16 @@ unsigned long long HopsEventStreamingTimer::GetEpochTime() {
 			(unsigned long long) (l_stTimeVal.tv_sec) * 1000
 					+ (unsigned long long) (l_stTimeVal.tv_usec) / 1000;
 	return l_llMillisecondsSinceEpoch;
+}
+// calling function has to delete the buffer, otherwise, this would be a memory leak
+// we can use this string for event name
+char * HopsEventStreamingTimer::GetUniqString() {
+	char *l_ptrBuffer = new char[80];
+	struct timeval te;
+	gettimeofday(&te, NULL); // get current time
+	long long milliseconds = te.tv_sec * 1000LL + te.tv_usec / 1000; //
+	sprintf(l_ptrBuffer, "%lld_%s", milliseconds, "SICS");
+	return l_ptrBuffer;
 }
 unsigned long long HopsEventStreamingTimer::GetMonotonicTime() {
 	struct timespec l_stTimeSpec;

@@ -27,7 +27,7 @@ public:
 	void initAPI(JavaVM *_ptrJVM);
 	pthread_t * GetPthreadIdArray(int *_ptrSize);
 	void StopAllDispatchingThreads();
-	void LoadSimulationInitAPI(JavaVM *_ptrJVM);
+	void LoadSimulationInitAPI(JavaVM *_ptrJVM,HopsConfigFile *_ptrConf);
 private:
 	HopsLoadSimulationEventAPI();  // Private so that it can  not be called
 	static HopsLoadSimulationEventAPI* m_pInstance;

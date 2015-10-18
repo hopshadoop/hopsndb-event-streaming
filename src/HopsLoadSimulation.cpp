@@ -13,7 +13,6 @@
 #define GB 1073741824
 #define MB 1048576
 
-#define EVENT_API_CONFIG "EventAPIConfig.ini"
 HopsLoadSimulation::HopsLoadSimulation() {
 	m_ptrnanoSleepTimer = NULL;
 	m_ptrLoadQ = NULL;
@@ -45,8 +44,9 @@ HopsLoadSimulation::~HopsLoadSimulation() {
 pthread_t HopsLoadSimulation::InitializeHopsSimulationThread(
 		HopsLoadSimulation * _ptrLoadSimulation,
 		HopsEventQueueFrame **_ptrLoadQ,
-		QueueSizeCondition ** _ptrQueueSizeCondition) {
+		QueueSizeCondition ** _ptrQueueSizeCondition, HopsConfigFile *_ptrConf) {
 	m_ptrLoadQ = _ptrLoadQ;
+	m_ptrConf=_ptrConf;
 	m_ptrQueueSizeCondtion = _ptrQueueSizeCondition;
 	pthread_attr_t l_pthreadAttr;
 	size_t l_pthreadStackSize;
@@ -76,27 +76,26 @@ void HopsLoadSimulation::InitSimulation() {
 
 	m_iTransactionId = 64000000;
 
-	HopsConfigFile cFile(EVENT_API_CONFIG);
-	m_iTotalNoOfGCI = (int) atoi(cFile.GetValue("TOTAL_GCI"));
-	m_iTotalThreads = (int) atoi(cFile.GetValue("PROCESSING_THREADS"));
-	m_iDelayms = (int) atoi(cFile.GetValue("DELAY_BETWEN_GCI"));
-	m_iTransactionPerGCI = (int) atoi(cFile.GetValue("TRANSACTION_PER_GCI"));
-	m_iNumberOfJavaClass = (int) atoi(cFile.GetValue("NUMBER_OF_JAVA_CLASS"));
+	m_iTotalNoOfGCI = (int) atoi(m_ptrConf->GetValue("TOTAL_GCI"));
+	m_iTotalThreads = (int) atoi(m_ptrConf->GetValue("PROCESSING_THREADS"));
+	m_iDelayms = (int) atoi(m_ptrConf->GetValue("DELAY_BETWEN_GCI"));
+	m_iTransactionPerGCI = (int) atoi(m_ptrConf->GetValue("TRANSACTION_PER_GCI"));
+	m_iNumberOfJavaClass = (int) atoi(m_ptrConf->GetValue("NUMBER_OF_JAVA_CLASS"));
 	m_iNumberOfAttributePerClass = (int) atoi(
-			cFile.GetValue("NUMBER_OF_ATTRIBUTE_PER_CLASS"));
+			m_ptrConf->GetValue("NUMBER_OF_ATTRIBUTE_PER_CLASS"));
 
 	m_iSingleContainerSize = (int) atoi(
-			cFile.GetValue("SINGLE_CONTAINER_SIZE"));
+			m_ptrConf->GetValue("SINGLE_CONTAINER_SIZE"));
 
 	m_iPhysicalThresholdMemory = (int) atoi(
-			cFile.GetValue("PHYSICAL_THRESHOLD_PERCENTAGE"));
+			m_ptrConf->GetValue("PHYSICAL_THRESHOLD_PERCENTAGE"));
 	m_fTotalPhysicalMemoryMB =
 			(float) m_ptrHopsMemoryUsage->GetTotalSystemMemory() / (float) GB;
 	m_iMaxProgramAllocationMemory = ((int) m_fTotalPhysicalMemoryMB
 			* m_iPhysicalThresholdMemory) / 100;
 
 	m_iVirtualThresholdMemory = (int) atoi(
-			cFile.GetValue("VIRTUAL_MEMORY_THRESHOLD_PERCENTAGE"));
+			m_ptrConf->GetValue("VIRTUAL_MEMORY_THRESHOLD_PERCENTAGE"));
 	m_fVirtualPhysicalMemoryMB =
 			(float) m_ptrHopsMemoryUsage->GetTotalSystemMemory() / (float) GB;
 	m_iMaxProgramAllocationVirtualMemory = ((int) m_fVirtualPhysicalMemoryMB

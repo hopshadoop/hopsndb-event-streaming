@@ -16,7 +16,6 @@
 #include "../include/HopsEventThreadData.h"
 #include "../include/HopsLoadSimulationJNIDispatcher.h"
 
-#define EVENT_API_CONFIG "EventAPIConfig.ini"
 
 #define SECONDS      1000000000
 #define MILLISECONDS 1000000
@@ -40,6 +39,7 @@ HopsLoadSimulationJNIDispatcher::HopsLoadSimulationJNIDispatcher() {
 	m_ptrJavaObjectDispatcherQ = NULL;
 	m_mdSingleThreadJavaMethod = NULL;
 	m_mdMultiThreadCallBackMethod = NULL;
+	m_ptrConf=NULL;
 
 	m_bIsIinterrupt = false;
 	m_bIsThisFirstTime = false;
@@ -77,8 +77,9 @@ void *HopsLoadSimulationJNIDispatcher::Run(void * _pLHandler) {
 pthread_t HopsLoadSimulationJNIDispatcher::StartEventProcessor(
 		HopsLoadSimulationJNIDispatcher *_ptrHopsJNIDispatcher,
 		HopsLoadSimulationJNIDispatcher *_ptrFriendDispatcher,
-		ThreadToken *_ptrThreadToken) {
+		ThreadToken *_ptrThreadToken,HopsConfigFile *_ptrConf) {
 
+	m_ptrConf=_ptrConf;
 	m_ptrThreadToken = _ptrThreadToken;
 
 	pthread_create(&m_threadid, NULL,
@@ -141,19 +142,18 @@ void HopsLoadSimulationJNIDispatcher::PrintJNIPlainMessage(int _iCategory,
 
 }
 void HopsLoadSimulationJNIDispatcher::WarmUpJavaObjectConfiguration() {
-	HopsConfigFile cFile(EVENT_API_CONFIG);
 
 	m_iSingleContainerSize = (int) atoi(
-			cFile.GetValue("SINGLE_CONTAINER_SIZE"));
+			m_ptrConf->GetValue("SINGLE_CONTAINER_SIZE"));
 	m_bIsPrintEnabled =
-			(int) atoi(cFile.GetValue("PRINT_ENABLED")) == 1 ? true : false;
+			(int) atoi(m_ptrConf->GetValue("PRINT_ENABLED")) == 1 ? true : false;
 	char l_zConfigReaderArray[1024];
 	char l_zCallBackReaderArray[1024];
 	sprintf(l_zConfigReaderArray, "SIMULATION_REFERENCE_TABLE_NAME");
-	strcpy(m_zReferenceTable, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(m_zReferenceTable, m_ptrConf->GetValue(l_zConfigReaderArray));
 
 	int l_iTotalNumberOfClasses = (int) atoi(
-			cFile.GetValue("SIMULATION_TOTAL_NUMBER_OF_CLASSES"));
+			m_ptrConf->GetValue("SIMULATION_TOTAL_NUMBER_OF_CLASSES"));
 
 	if (l_iTotalNumberOfClasses == 0) {
 		printf(
@@ -164,7 +164,7 @@ void HopsLoadSimulationJNIDispatcher::WarmUpJavaObjectConfiguration() {
 	memset(l_zConfigReaderArray, 0, sizeof(l_zConfigReaderArray));
 	memset(m_zCallBackClassName, 0, sizeof(m_zCallBackClassName));
 	sprintf(l_zConfigReaderArray, "SIMULATION_CALLBACK_CLASS_NAME");
-	strcpy(m_zCallBackClassName, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(m_zCallBackClassName, m_ptrConf->GetValue(l_zConfigReaderArray));
 
 	if (m_bIsPrintEnabled) {
 		printf(
@@ -173,7 +173,7 @@ void HopsLoadSimulationJNIDispatcher::WarmUpJavaObjectConfiguration() {
 	}
 	memset(l_zConfigReaderArray, 0, sizeof(l_zConfigReaderArray));
 	sprintf(l_zConfigReaderArray, "SIMULATION_SINGLE_THREAD_CALLBACK_METHOD");
-	strcpy(l_zCallBackReaderArray, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(l_zCallBackReaderArray, m_ptrConf->GetValue(l_zConfigReaderArray));
 	HopsStringTokenizer l_oListSepSingleThreadCallBack(l_zCallBackReaderArray,
 			'|');
 
@@ -220,7 +220,7 @@ void HopsLoadSimulationJNIDispatcher::WarmUpJavaObjectConfiguration() {
 		sprintf(l_zBuff, "SIMULATION_JAVA_CLASS_NAME_%d", m + 1);
 		//TODO Sometime class length is bigger than this limit, we should change to dynamic memory allocation
 		char l_zSetOfSignatures[2048];
-		strcpy(l_zSetOfSignatures, cFile.GetValue(l_zBuff));
+		strcpy(l_zSetOfSignatures, m_ptrConf->GetValue(l_zBuff));
 
 		HopsStringTokenizer l_oClassSigSep(l_zSetOfSignatures, '|');
 		const char *l_pzNewBuildFunctionName = l_oClassSigSep.GetTokenAt(0);
@@ -250,7 +250,7 @@ void HopsLoadSimulationJNIDispatcher::WarmUpJavaObjectConfiguration() {
 	memset(l_zConfigReaderArray, 0, sizeof(l_zConfigReaderArray));
 	memset(l_zCallBackReaderArray, 0, sizeof(l_zCallBackReaderArray));
 	sprintf(l_zConfigReaderArray, "SIMULATION_MULTI_THREAD_CLASS_BUILDER_NAME");
-	strcpy(l_zCallBackReaderArray, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(l_zCallBackReaderArray, m_ptrConf->GetValue(l_zConfigReaderArray));
 
 	HopsStringTokenizer l_oListSepMTBuildCallBack(l_zCallBackReaderArray, '|'); // this separator helps to extract the load deviation
 
@@ -266,7 +266,7 @@ void HopsLoadSimulationJNIDispatcher::WarmUpJavaObjectConfiguration() {
 
 	memset(l_zConfigReaderArray, 0, sizeof(l_zConfigReaderArray));
 	sprintf(l_zConfigReaderArray, "SIMULATION_MULTI_THREAD_CALLBACK_METHOD");
-	strcpy(l_zCallBackReaderArray, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(l_zCallBackReaderArray, m_ptrConf->GetValue(l_zConfigReaderArray));
 
 	HopsStringTokenizer l_oListSepMTCallBack(l_zCallBackReaderArray, '|'); // this separator helps to extract the load deviation
 

@@ -20,6 +20,7 @@
 #include "HopsReturnObject.h"
 #include "HopsEventThreadData.h"
 
+using namespace cnf;
 using namespace hops::utl::que;
 using namespace hops::utl;
 using namespace hopsjni;
@@ -33,7 +34,7 @@ public:
 	static void * Run(void * _pProcessor);
 	pthread_t StartEventProcessor(HopsJNIDispatcher *_ptrHopsJNIDispatcher,
 			HopsJNIDispatcher *_ptrFriendDispatcher,
-			ThreadToken *_ptrThreadToken);
+			ThreadToken *_ptrThreadToken,HopsConfigFile *_ptrConf);
 	void StopProcessorThread() {
 		m_bIsIinterrupt = true;
 	}
@@ -68,6 +69,7 @@ private:
     void ClearBatchMemory();
     int SingleThreadBDWithOutRefTable();
 	ThreadToken *m_ptrThreadToken;
+	HopsConfigFile *m_ptrConf;
 	HopsJNIDispatcher *m_ptrNeighbourDispatcher;
 	HopsEventQueueFrame *m_ptrJavaObjectDispatcherQ;
 	HopObject **m_ptrHopsObjects;
@@ -127,7 +129,7 @@ private:
 	char m_zSingleThreadCallBackMethod[400];
 	char m_zSingleThreadCallBackMethodSig[400];
 	
-        char m_zResetMethod[400];
+    char m_zResetMethod[400];
 	char m_zResetMethodSig[400];
 
 	char m_zMultiThreadCallBackMethodName[400];
@@ -136,7 +138,6 @@ private:
 	char m_zMultiThreadBuildCallBackMethod[400];
 	char m_zMultiThreadBuildClassBackMethodSig[400];
 
-	ofstream m_ofStream;
 };
 
 #endif /* HOPSEVENTPROCESSOR_H_ */

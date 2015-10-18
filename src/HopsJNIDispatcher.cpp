@@ -19,7 +19,6 @@
 #include <utility>
 #include <algorithm>
 
-#define EVENT_API_CONFIG "EventAPIConfig.ini"
 
 #define SECONDS      1000000000
 #define MILLISECONDS 1000000
@@ -29,7 +28,6 @@
 using namespace hops::utl;
 using namespace cnf;
 
-ofstream m_ofStream;
 int globalTransCounter = 0;
 HopsJNIDispatcher::HopsJNIDispatcher() {
 	m_ptrJavaObjectDispatcherQ = NULL;
@@ -39,8 +37,10 @@ HopsJNIDispatcher::HopsJNIDispatcher() {
 	m_mdMultiThreadCallBackMethod = NULL;
 	m_mdSingleThreadCallBackMethod = NULL;
 	m_mdBuildCompositeMethod = NULL;
+	m_mdResetMethod = NULL;
 	m_ptrThreadToken = NULL;
 	m_ptrJNI = NULL;
+	m_ptrConf=NULL;
 	m_ptrCondtionLock = NULL;
 	m_ptrHopsObjects = NULL;
 	m_ptrSleepTimer = NULL;
@@ -57,8 +57,6 @@ HopsJNIDispatcher::HopsJNIDispatcher() {
 	m_ullPreviousDispatchTime = 0;
 	m_iInternalGCIIndex = 0;
 	m_threadid = 0;
-	m_ofStream.open("/home/sri/dump.txt");
-	m_ofStream << "##GCI,Number of transaction, distpatch time" << endl;
 
 }
 
@@ -85,8 +83,9 @@ void *HopsJNIDispatcher::Run(void * _pLHandler) {
 
 pthread_t HopsJNIDispatcher::StartEventProcessor(
 		HopsJNIDispatcher *_ptrHopsJNIDispatcher,
-		HopsJNIDispatcher *_ptrFriendDispatcher, ThreadToken *_ptrThreadToken) {
+		HopsJNIDispatcher *_ptrFriendDispatcher, ThreadToken *_ptrThreadToken,HopsConfigFile *_ptrConf) {
 
+	m_ptrConf=_ptrConf;
 	m_ptrThreadToken = _ptrThreadToken;
 	pthread_create(&m_threadid, NULL, (void*(*)(void*)) HopsJNIDispatcher::Run, (void*) _ptrHopsJNIDispatcher);
 	printf(
@@ -147,23 +146,22 @@ void HopsJNIDispatcher::PrintJNIPlainMessage(int _iCategory,
 
 }
 void HopsJNIDispatcher::WarmUpJavaObjectConfiguration() {
-	HopsConfigFile cFile(EVENT_API_CONFIG);
 	char l_zConfigReaderArray[1024];
 	char l_zValues[1024];
 	memset(l_zValues, 0, sizeof(l_zValues));
 	// table used to order the incoming events from streaming
 
 	sprintf(l_zConfigReaderArray, "REFERENCE_TABLE_NAME");
-	strcpy(m_zReferenceTable, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(m_zReferenceTable, m_ptrConf->GetValue(l_zConfigReaderArray));
 	if (!(strcmp(m_zReferenceTable, "X") == 0)) {
 		m_bIsReferenceTableProvided = true;
 	}
 
 	m_bIsPrintEnabled =
-			(int) atoi(cFile.GetValue("PRINT_ENABLED")) == 1 ? true : false;
+			(int) atoi(m_ptrConf->GetValue("PRINT_ENABLED")) == 1 ? true : false;
 
 	int l_iTotalNumberOfClasses = (int) atoi(
-			cFile.GetValue("TOTAL_NUMBER_OF_CLASSES"));
+			m_ptrConf->GetValue("TOTAL_NUMBER_OF_CLASSES"));
 
 	if (l_iTotalNumberOfClasses == 0) {
 		printf(
@@ -175,7 +173,7 @@ void HopsJNIDispatcher::WarmUpJavaObjectConfiguration() {
 	memset(m_zCallBackClassName, 0, sizeof(m_zCallBackClassName));
 	sprintf(l_zConfigReaderArray, "CALLBACK_CLASS_NAME");
 
-	strcpy(m_zCallBackClassName, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(m_zCallBackClassName, m_ptrConf->GetValue(l_zConfigReaderArray));
 
 	if (m_bIsPrintEnabled) {
 		printf(
@@ -185,7 +183,7 @@ void HopsJNIDispatcher::WarmUpJavaObjectConfiguration() {
 
 	memset(l_zConfigReaderArray, 0, sizeof(l_zConfigReaderArray));
 	sprintf(l_zConfigReaderArray, "SINGLE_THREAD_CALLBACK_METHOD");
-	strcpy(l_zValues, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(l_zValues, m_ptrConf->GetValue(l_zConfigReaderArray));
 	HopsStringTokenizer l_oListSepSingleThreadCallBack(l_zValues, '|'); // this separator helps to extract the load deviation
 
 	memset(m_zSingleThreadCallBackMethod, 0,
@@ -206,23 +204,16 @@ void HopsJNIDispatcher::WarmUpJavaObjectConfiguration() {
 				m_zSingleThreadCallBackMethodSig);
 	}
 
-        memset(l_zConfigReaderArray, 0, sizeof(l_zConfigReaderArray));
+	memset(l_zConfigReaderArray, 0, sizeof(l_zConfigReaderArray));
 	sprintf(l_zConfigReaderArray, "RESET_METHOD");
-	strcpy(l_zValues, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(l_zValues, m_ptrConf->GetValue(l_zConfigReaderArray));
 	HopsStringTokenizer l_oListSepResetMethod(l_zValues, '|'); // this separator helps to extract the load deviation
 
-	memset(m_zResetMethod, 0,
-			sizeof(m_zResetMethod));
-	memset(m_zResetMethodSig, 0,
-			sizeof(m_zResetMethodSig));
+	memset(m_zResetMethod, 0, sizeof(m_zResetMethod));
+	memset(m_zResetMethodSig, 0, sizeof(m_zResetMethodSig));
 
-	strcpy(m_zResetMethod,
-			l_oListSepResetMethod.GetTokenAt(0));
-	strcpy(m_zResetMethodSig,
-			l_oListSepResetMethod.GetTokenAt(1));
-
-
-
+	strcpy(m_zResetMethod, l_oListSepResetMethod.GetTokenAt(0));
+	strcpy(m_zResetMethodSig, l_oListSepResetMethod.GetTokenAt(1));
 
 	jclass l_callbackClass = m_ptrJNI->FindClass(m_zCallBackClassName);
 
@@ -245,7 +236,7 @@ void HopsJNIDispatcher::WarmUpJavaObjectConfiguration() {
 	memset(l_zValues, 0, sizeof(l_zValues));
 
 	sprintf(l_zConfigReaderArray, "JAVA_CLASS_NAME_LISTS");
-	strcpy(l_zValues, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(l_zValues, m_ptrConf->GetValue(l_zConfigReaderArray));
 	HopsStringTokenizer l_oListClass(l_zValues, ','); // this separator helps to extract the load deviation
 	for (int i = 0; i < l_oListClass.GetCount(); ++i) {
 		jmethodID l_mdCallBackMethod = m_ptrJNI->GetMethodID(
@@ -265,7 +256,7 @@ void HopsJNIDispatcher::WarmUpJavaObjectConfiguration() {
 		sprintf(l_zBuff, "JAVA_CLASS_NAME_%d", m + 1);
 		//TODO Sometime class length is bigger than this limit, we should change to dynamic memory allocation
 		char l_zSetOfSignatures[2048];
-		strcpy(l_zSetOfSignatures, cFile.GetValue(l_zBuff));
+		strcpy(l_zSetOfSignatures, m_ptrConf->GetValue(l_zBuff));
 
 		HopsStringTokenizer l_oClassSigSep(l_zSetOfSignatures, '|');
 		const char *l_pzNewBuildFunctionName = l_oClassSigSep.GetTokenAt(0);
@@ -295,7 +286,7 @@ void HopsJNIDispatcher::WarmUpJavaObjectConfiguration() {
 	memset(l_zValues, 0, sizeof(l_zValues));
 
 	sprintf(l_zConfigReaderArray, "MULTI_THREAD_CLASS_BUILDER_NAME");
-	strcpy(l_zValues, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(l_zValues, m_ptrConf->GetValue(l_zConfigReaderArray));
 
 	HopsStringTokenizer l_oListSepMTBuildCallBack(l_zValues, '|');
 
@@ -312,7 +303,7 @@ void HopsJNIDispatcher::WarmUpJavaObjectConfiguration() {
 	memset(l_zConfigReaderArray, 0, sizeof(l_zConfigReaderArray));
 
 	sprintf(l_zConfigReaderArray, "MULTI_THREAD_CALLBACK_METHOD");
-	strcpy(l_zValues, cFile.GetValue(l_zConfigReaderArray));
+	strcpy(l_zValues, m_ptrConf->GetValue(l_zConfigReaderArray));
 
 	HopsStringTokenizer l_oListSepMTCallBack(l_zValues, '|'); // this separator helps to extract the load deviation
 
@@ -343,14 +334,14 @@ void HopsJNIDispatcher::WarmUpJavaObjectConfiguration() {
 	m_mdSingleThreadCallBackMethod = m_ptrJNI->GetMethodID(m_jniClassGlobalRef,
 			m_zSingleThreadCallBackMethod, m_zSingleThreadCallBackMethodSig);
 
-        m_mdResetMethod = m_ptrJNI->GetMethodID(m_jniClassGlobalRef,
-			m_zResetMethod, m_zResetMethodSig);
+	m_mdResetMethod = m_ptrJNI->GetMethodID(m_jniClassGlobalRef, m_zResetMethod,
+			m_zResetMethodSig);
 
 	if (m_mdSingleThreadCallBackMethod == NULL) {
 		PrintJNIPlainMessage(2,
 				"Exception occurred in finding Single thread java method");
 	}
-        if (m_mdResetMethod == NULL) {
+	if (m_mdResetMethod == NULL) {
 		PrintJNIPlainMessage(2,
 				"Exception occurred in finding reset java method");
 	}
@@ -458,9 +449,6 @@ int HopsJNIDispatcher::processQ() {
 				}
 				unsigned long long duration = l_FinishTime
 						- m_ullPreviousDispatchTime;
-				//printf("%d,%lld\n", l_iTransactionCount, duration);
-				m_ofStream << globalTransCounter << "," << l_iTransactionCount
-						<< "," << duration << endl;
 				++globalTransCounter;
 				m_ullPreviousDispatchTime = l_FinishTime;
 			}
@@ -489,12 +477,8 @@ void HopsJNIDispatcher::CleanUpUnwantedObjectMemory() {
 			m_mapOfReturnObjectItr != m_mapOfReturnObject.end();
 			++m_mapOfReturnObjectItr) {
 		if ((int) m_mapOfReturnObjectItr->second.size() != 0) {
-			//	printf(
-			//			"[HopsJNIDispatcher][INFO] ########### Can't dispatch objects, because, we have an objects from other tables but not from reference table ############# \n");
 			for (int i = 0; i < (int) m_mapOfReturnObjectItr->second.size();
 					++i) {
-				//printf("[JNIDispatcher] Table name : %s \n",
-				//		m_mapOfReturnObjectItr->second[i]->GetTableName());
 				delete m_mapOfReturnObjectItr->second[i];
 			}
 			m_mapOfReturnObjectItr->second.clear();
@@ -677,7 +661,7 @@ int HopsJNIDispatcher::SingleThreadBDWithOutRefTable() {
 			}
 			for (int i = 0; i < (int) l_innermapItr->second.size(); ++i) {
 				string l_sTableName(l_innermapItr->second[i]->GetTableName());
-			//	printf("table name - %s - pending id - %d \n",l_sTableName.c_str(), l_iPendingEventId);
+				//	printf("table name - %s - pending id - %d \n",l_sTableName.c_str(), l_iPendingEventId);
 				int l_iPos = m_TablePositions[l_sTableName];
 
 				m_ptrHopsObjects[l_iPos]->BuildHopJavaObject(
@@ -713,7 +697,8 @@ int HopsJNIDispatcher::SingleThreadBDWithRefTable() {
 		if (m_itrPendingEvent != m_mapOfPendingEvents.end()) {
 			// so we found the rm node , lets dispatch
 			// now sort the pending events
-			   std::sort(m_itrPendingEvent->second.begin(),m_itrPendingEvent->second.end());
+			std::sort(m_itrPendingEvent->second.begin(),
+					m_itrPendingEvent->second.end());
 			for (int i = 0; i < (int) m_itrPendingEvent->second.size(); ++i) {
 				// go through all the pending event and dispatch , this will avoid unnecessary dispatch
 				int l_iPendingEventId = m_itrPendingEvent->second[i];
@@ -741,9 +726,8 @@ int HopsJNIDispatcher::SingleThreadBDWithRefTable() {
 
 					m_ptrJNI->CallVoidMethod(m_newCallBackObj,
 							m_mdSingleThreadCallBackMethod);
-                                        //lets call the reset method here to clear the objects, so we can prepare the objects for next round
-					m_ptrJNI->CallVoidMethod(m_newCallBackObj,
-							m_mdResetMethod);
+					//lets call the reset method here to clear the objects, so we can prepare the objects for next round
+					m_ptrJNI->CallVoidMethod(m_newCallBackObj, m_mdResetMethod);
 
 					l_innermapItr->second.clear();
 				}

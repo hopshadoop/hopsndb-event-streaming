@@ -11,10 +11,10 @@ extern "C" {
 /*
  * Class:     NdbEventStreaming
  * Method:    startEventAPISession
- * Signature: ()V
+ * Signature: (I)V
  */
 JNIEXPORT void JNICALL Java_io_hops_metadata_ndb_JniNdbEventStreaming_startEventAPISession(
-		JNIEnv *, jobject);
+		JNIEnv *, jobject, jint);
 
 /*
  * Class:     NdbEventStreaming
