@@ -207,12 +207,12 @@ unsigned long long HopsEventStreamingTimer::GetEpochTime() {
 }
 // calling function has to delete the buffer, otherwise, this would be a memory leak
 // we can use this string for event name
-char * HopsEventStreamingTimer::GetUniqString() {
+char * HopsEventStreamingTimer::GetUniqString(int _iSuffix) {
 	char *l_ptrBuffer = new char[80];
 	struct timeval te;
 	gettimeofday(&te, NULL); // get current time
 	long long milliseconds = te.tv_sec * 1000LL + te.tv_usec / 1000; //
-	sprintf(l_ptrBuffer, "%lld_%s", milliseconds, "SICS");
+	sprintf(l_ptrBuffer, "%lld_%s_%d", milliseconds, "SICS", _iSuffix);
 	return l_ptrBuffer;
 }
 unsigned long long HopsEventStreamingTimer::GetMonotonicTime() {

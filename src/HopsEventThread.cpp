@@ -16,20 +16,12 @@
 #include <fstream>
 #include <sstream>
 #include <sys/utsname.h>
-#define MAX_EVENT_LENGTH 20
+#define MAX_EVENT_LENGTH 40
 #define MAX_NUMBER_OF_COLUMN_SUBSCRIPTION 50
 #define MAX_TABLE_NANE_LENGTH 50
 #define UINT_MAX32 0xFFFFFFFFL
 
 pthread_t HopsEventThread::m_threadid;
-HopsEventThread* HopsEventThread::m_pInstance = NULL;
-
-HopsEventThread* HopsEventThread::Instance() {
-	if (!m_pInstance)   // Only allow one instance of class to be generated.
-		m_pInstance = new HopsEventThread();
-
-	return m_pInstance;
-}
 
 HopsEventThread::HopsEventThread() {
 	m_bMergeEvent = false;
@@ -42,6 +34,7 @@ HopsEventThread::HopsEventThread() {
 	m_iMaxEventBufferMemory = 0;
 	m_iGlobalGCIIndexValue = 0;
 	m_iTotalProcessingThreads = 0;
+	m_iSingleContainerSize = 0;
 	m_iEventType = 0;
 	m_Ndb = NULL;
 	m_pZDatabseName = NULL;
@@ -76,38 +69,31 @@ HopsEventThread::~HopsEventThread() {
 
 	std::cout << "[EventThread] destructor is calling now " << std::endl;
 	// don't want to listen to events anymore
-	for (int i = 0; i < m_iTotalNoOfTable; ++i) {
-		if (m_Ndb->dropEventOperation(m_VectorEventOperationArray[i])) {
-			APIERROR(m_Ndb->getNdbError());
+	if (m_Ndb != NULL) {
+		for (int i = 0; i < m_iTotalNoOfTable; ++i) {
+			if (m_Ndb->dropEventOperation(m_VectorEventOperationArray[i])) {
+				APIERROR(m_Ndb->getNdbError());
+			}
 		}
+
+		if (m_pIntEventArray)
+			delete[] m_pIntEventArray;
+		for (int i = 0; i < m_iTotalNoOfTable; ++i) {
+			delete m_pzEventTableNameArray[i];
+			delete m_pzEventColNamesArray[i];
+			delete m_pNdbRecAttrCurrent[i];
+			delete m_pNdbRecAttrPrevious[i];
+			delete m_pzEventNameArray[i];
+
+		}
+
+		delete[] m_pzEventTableNameArray;
+		delete[] m_pzEventColNamesArray;
+		delete[] m_pNdbRecAttrCurrent;
+		delete[] m_pNdbRecAttrPrevious;
+		delete[] m_pzEventNameArray;
+		delete m_Ndb;
 	}
-
-	NdbDictionary::Dictionary *myDict = m_Ndb->getDictionary();
-	if (!myDict)
-		APIERROR(m_Ndb->getNdbError());
-	// remove event from database
-	for (int p = 0; p < m_iTotalNoOfTable; ++p) {
-		if (myDict->dropEvent(m_pzEventNameArray[p]))
-			APIERROR(myDict->getNdbError());
-	}
-	if (m_pIntEventArray)
-		delete[] m_pIntEventArray;
-	for (int i = 0; i < m_iTotalNoOfTable; ++i) {
-		delete m_pzEventTableNameArray[i];
-		delete m_pzEventColNamesArray[i];
-		delete m_pNdbRecAttrCurrent[i];
-		delete m_pNdbRecAttrPrevious[i];
-		delete m_pzEventNameArray[i];
-
-	}
-
-	delete[] m_pzEventTableNameArray;
-	delete[] m_pzEventColNamesArray;
-	delete[] m_pNdbRecAttrCurrent;
-	delete[] m_pNdbRecAttrPrevious;
-	delete[] m_pzEventNameArray;
-
-	delete m_Ndb;
 
 }
 void HopsEventThread::populateArray() {
@@ -125,6 +111,7 @@ void HopsEventThread::populateArray() {
 	m_pNdbRecAttrPrevious = new NdbRecAttribute*[m_iTotalNoOfTable];
 
 }
+
 void HopsEventThread::setDatabaseNameAndNoOfTable(const char *_pDatabaseName,
 		int _iTotalNoOfTable) {
 	m_pZDatabseName = _pDatabaseName;
@@ -172,10 +159,8 @@ void HopsEventThread::subscribeEvents() {
 	}
 	int l_iOffSetVal = 0;
 	for (int j = 0; j < m_iTotalNoOfTable; ++j) {
-		char l_zEventName[MAX_EVENT_LENGTH];
-		memset(l_zEventName, 0, sizeof(l_zEventName));
 
-		char *l_ptrTimeStamp = l_EventStreamingTimer->GetUniqString();
+		char *l_ptrTimeStamp = l_EventStreamingTimer->GetUniqString(j);
 		strcpy(m_pzEventNameArray[j], l_ptrTimeStamp);
 		m_eventNames.push_back(l_ptrTimeStamp);
 
@@ -191,7 +176,7 @@ void HopsEventThread::subscribeEvents() {
 					(m_pzEventColNamesArray + h + l_iOffSetVal),
 					sizeof(char *));
 		}
-		EventSubscription(m_Ndb, (const char *) l_zEventName,
+		EventSubscription(m_Ndb, (const char *) m_pzEventNameArray[j],
 				(const char *) l_zTableName, (const char **) l_zEventColumnName,
 				l_iNumberOfCol, getIsMergeEvents());
 		std::string l_sTablename(m_pzEventTableNameArray[j]);
@@ -227,14 +212,16 @@ void HopsEventThread::subscribeEvents() {
 
 		if (m_VectorEventOperationArray[j]->execute())
 			APIERROR(m_VectorEventOperationArray[j]->getNdbError());
+
 	}
 
 	m_bIsEventDetailsSet = true;
+	delete l_EventStreamingTimer;
 	printf(
 			"[EventThread]################## Successfully subscribed to an event listening  ###################### \n");
 }
 
-pthread_t HopsEventThread::StartEventThread() {
+pthread_t HopsEventThread::StartEventThread(HopsEventThread *_ptrEventThread) {
 	pthread_attr_t l_pthreadAttr;
 	size_t l_pthreadStackSize;
 	pthread_attr_init(&l_pthreadAttr);
@@ -249,11 +236,12 @@ pthread_t HopsEventThread::StartEventThread() {
 	printf("######## Kernel release           : %s\n", l_utsName.release);
 	printf("######## Version                  : %s\n", l_utsName.version);
 	printf("######## System stack size        : %li\n", l_pthreadStackSize);
-	pthread_create(&m_threadid, NULL, (void*(*)(void*)) HopsEventThread::Run, (void*) HopsEventThread::Instance());
+	pthread_create(&m_threadid, NULL, (void*(*)(void*)) HopsEventThread::Run, (void*)_ptrEventThread);
 	cout
 			<< "[EventThread] ################### Event processor starting on this thread id  : "
 			<< m_threadid << endl;
 
+	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 	return m_threadid;
 }
 
@@ -300,46 +288,44 @@ void HopsEventThread::PushDataToOtherThread(NdbEventOperation *_pNdbOperation) {
 	m_pQHolder[l_iThreaedIdOffSet]->PushToIntermediateQueue();
 
 }
-void HopsEventThread::StartThread() {
 
+void HopsEventThread::CancelEventThread() {
+	pthread_cancel(m_threadid);
+}
+void HopsEventThread::StartThread() {
 	while (true) {
 		if (getIsEventDetailsSet()) {
 			while (true) {
-				if (m_bIsIinterrupt) {
-					delete m_pInstance;
-					pthread_exit(NULL);
-
-				}
-				// Check if signal to exit is received
-				int r = m_Ndb->pollEvents(1); // wait for event or 1 ms
-				if (r > 0) {
-					NdbEventOperation *ptempOP;
-					while ((ptempOP = m_Ndb->nextEvent())) {
-						PushDataToOtherThread(ptempOP);
+				if (!m_bIsIinterrupt) {
+					int l_iResult = m_Ndb->pollEvents(1); // wait for event or 1 ms
+					if (l_iResult > 0) {
+						NdbEventOperation *ptempOP;
+						while ((ptempOP = m_Ndb->nextEvent())) {
+							PushDataToOtherThread(ptempOP);
+						}
 					}
-
+				}else{
+					sleep(1);
 				}
 			}
 
-		} else {
-			printf(
-					"[NdbEventAPI]############## Thread is sleeping for a while \n");
 		}
 	}
-
 }
-
-void HopsEventThread::dropEvents() {
+void HopsEventThread::DropEvents() {
 	// when api function called, drop all the events and start again
 	if (m_Ndb != NULL) {
 		// if component restart m_ndb is not null, so drop all the events and subscribe again
 		NdbDictionary::Dictionary *myDict = m_Ndb->getDictionary();
 		for (int i = 0; i < (int) m_eventNames.size(); ++i) {
+			printf("Dropping the events from data base : %s \n",
+					m_eventNames[i]);
 			if (myDict->dropEvent(m_eventNames[i]))
 				APIERROR(myDict->getNdbError());
 		}
 	}
 	m_eventNames.clear();
+	m_VectorEventOperationArray.clear();
 
 }
 int HopsEventThread::EventSubscription(Ndb* myNdb, const char *eventName,

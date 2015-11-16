@@ -19,7 +19,6 @@
 #include <utility>
 #include <algorithm>
 
-
 #define SECONDS      1000000000
 #define MILLISECONDS 1000000
 #define MICROSECONDS 1000
@@ -40,7 +39,7 @@ HopsJNIDispatcher::HopsJNIDispatcher() {
 	m_mdResetMethod = NULL;
 	m_ptrThreadToken = NULL;
 	m_ptrJNI = NULL;
-	m_ptrConf=NULL;
+	m_ptrConf = NULL;
 	m_ptrCondtionLock = NULL;
 	m_ptrHopsObjects = NULL;
 	m_ptrSleepTimer = NULL;
@@ -83,9 +82,10 @@ void *HopsJNIDispatcher::Run(void * _pLHandler) {
 
 pthread_t HopsJNIDispatcher::StartEventProcessor(
 		HopsJNIDispatcher *_ptrHopsJNIDispatcher,
-		HopsJNIDispatcher *_ptrFriendDispatcher, ThreadToken *_ptrThreadToken,HopsConfigFile *_ptrConf) {
+		HopsJNIDispatcher *_ptrFriendDispatcher, ThreadToken *_ptrThreadToken,
+		HopsConfigFile *_ptrConf) {
 
-	m_ptrConf=_ptrConf;
+	m_ptrConf = _ptrConf;
 	m_ptrThreadToken = _ptrThreadToken;
 	pthread_create(&m_threadid, NULL, (void*(*)(void*)) HopsJNIDispatcher::Run, (void*) _ptrHopsJNIDispatcher);
 	printf(
@@ -93,6 +93,7 @@ pthread_t HopsJNIDispatcher::StartEventProcessor(
 			m_threadid);
 
 	m_ptrNeighbourDispatcher = _ptrFriendDispatcher;
+	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 	return m_threadid;
 }
 
@@ -158,7 +159,8 @@ void HopsJNIDispatcher::WarmUpJavaObjectConfiguration() {
 	}
 
 	m_bIsPrintEnabled =
-			(int) atoi(m_ptrConf->GetValue("PRINT_ENABLED")) == 1 ? true : false;
+			(int) atoi(m_ptrConf->GetValue("PRINT_ENABLED")) == 1 ?
+					true : false;
 
 	int l_iTotalNumberOfClasses = (int) atoi(
 			m_ptrConf->GetValue("TOTAL_NUMBER_OF_CLASSES"));
@@ -381,28 +383,25 @@ void HopsJNIDispatcher::PrepareAllJNIVariables() {
 
 }
 
+void HopsJNIDispatcher::StopDispatcher() {
+	jint l_jResult = m_jvm->DetachCurrentThread();
+	if (l_jResult != JNI_OK) {
+		printf(
+				"[HopsJNIDispatcher][FAILED] ########### Failed to detach native thread  - %li\n",
+				pthread_self());
+	} else {
+		printf(
+				"[HopsJNIDispatcher][INFO] ########### Successfully  detach native thread  - %li\n",
+				pthread_self());
+	}
+	pthread_cancel(m_threadid);
+}
 void HopsJNIDispatcher::StartProcesser() {
 
 	PrepareAllJNIVariables();
-
 	while (true) {
 		int l_iPrcoeedSize = processQ();
 		m_ptrCondtionLock->DecreaseQueueSize(l_iPrcoeedSize);
-		if (m_bIsIinterrupt) {
-			jint l_jResult = m_jvm->DetachCurrentThread();
-			if (l_jResult != JNI_OK) {
-				printf(
-						"[HopsJNIDispatcher][FAILED] ########### Failed to detach native thread  - %li\n",
-						pthread_self());
-			} else {
-				if (m_bIsPrintEnabled) {
-					printf(
-							"[HopsJNIDispatcher][INFO] ########### Successfully  detach native thread  - %li\n",
-							pthread_self());
-				}
-			}
-			pthread_exit(NULL);
-		}
 	}
 }
 
@@ -431,7 +430,7 @@ int HopsJNIDispatcher::processQ() {
 				if (m_iInternalGCIIndex > 0) {
 					m_ptrThreadToken->WaitForSignal();
 				}
-				int l_iTransactionCount = MultiThreadedDispatch(
+				MultiThreadedDispatch(
 						l_vecJavaTempObject);
 				//unsigned long long l_FinishTime =
 				//		m_ptrSleepTimer->GetEpochTime();
@@ -447,8 +446,8 @@ int HopsJNIDispatcher::processQ() {
 				} else {
 					l_iTransactionCount = SingleThreadBDWithOutRefTable();
 				}
-				unsigned long long duration = l_FinishTime
-						- m_ullPreviousDispatchTime;
+//				unsigned long long duration = l_FinishTime
+//						- m_ullPreviousDispatchTime;
 				++globalTransCounter;
 				m_ullPreviousDispatchTime = l_FinishTime;
 			}
@@ -654,7 +653,7 @@ int HopsJNIDispatcher::SingleThreadBDWithOutRefTable() {
 				++l_innermapItr) {
 			// go through all the pending event and dispatch , this will avoid unnecessary dispatch
 			++GlobalTotalTransactionCount;
-			int l_iPendingEventId = l_innermapItr->first;
+			///int l_iPendingEventId = l_innermapItr->first;
 			for (int j = 0; j < (int) vecListJavaMethod.size(); ++j) {
 				m_ptrJNI->CallVoidMethod(m_newCallBackObj,
 						vecListJavaMethod[j]);
@@ -708,7 +707,7 @@ int HopsJNIDispatcher::SingleThreadBDWithRefTable() {
 						l_iPendingEventId);
 				if (l_innermapItr != m_mapOfBTObjectsItr->second.end()) {
 					++GlobalTotalTransactionCount;
-					int l_iPendingEventId = l_innermapItr->first;
+					//int l_iPendingEventId = l_innermapItr->first;
 					for (int j = 0; j < (int) vecListJavaMethod.size(); ++j) {
 						m_ptrJNI->CallVoidMethod(m_newCallBackObj,
 								vecListJavaMethod[j]);

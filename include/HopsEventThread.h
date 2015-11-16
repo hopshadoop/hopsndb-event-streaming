@@ -37,7 +37,7 @@ typedef struct {
 
 class HopsEventThread {
 public:
-	static HopsEventThread* Instance();
+	HopsEventThread();
 	virtual ~HopsEventThread();
 	void InintEventThread(Ndb_cluster_connection *_ptrClusterConnection,
 			HopsEventQueueFrame **_ptrQHolder, int _iMaxEventBufferMemory,
@@ -45,9 +45,9 @@ public:
 			int _iTotalProcessingThread, int _iThreadSingleContainerSize);
 	void StartThread();
 	static void * Run(void * _pProcessor);
-	static pthread_t StartEventThread();
+	static pthread_t StartEventThread(HopsEventThread *_ptrEventThread);
 
-	void dropEvents();
+	void DropEvents();
 	int EventSubscription(Ndb* myNdb, const char *eventName,
 			const char *eventTableName, const char **eventColumnNames,
 			const int noEventColumnNames, bool merge_events);
@@ -71,8 +71,9 @@ public:
 	void StopEventThread() {
 		m_bIsIinterrupt = true;
 	}
+	void CancelEventThread();
 private:
-	HopsEventThread();  // Private so that it can  not be called
+
 	void populateArray();
 	void PushDataToOtherThread(NdbEventOperation *_pNdbOperation);
 	static pthread_t m_threadid;
@@ -104,7 +105,6 @@ private:
 	std::map<std::string, int> m_mapTablenNoOfEvents;
 
 	HopsEventStreamingTimer *m_ptrnanoSleepTimer;
-	static HopsEventThread* m_pInstance;
 	volatile bool m_bIsIinterrupt;
 
 	QueueSizeCondition ** m_ptrQueueSizeCondition;

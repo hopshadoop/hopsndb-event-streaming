@@ -34,6 +34,8 @@ HopsEventAPI::HopsEventAPI() {
 	m_iMaxEventBufferSize = 0;
 	m_ptrCondtionLock = NULL;
 	m_ptrJNIDispatcher = NULL;
+	m_ptrEventThread = NULL;
+	m_bAPIInitialized = false;
 }
 
 HopsEventAPI::~HopsEventAPI() {
@@ -46,6 +48,7 @@ HopsEventAPI::~HopsEventAPI() {
 	}
 	delete[] m_ptrJNIDispatcher;
 	delete[] m_ptrProcessingQ;
+	delete m_ptrEventThread;
 }
 
 pthread_t * HopsEventAPI::GetPthreadIdArray(int *_ptrSize) {
@@ -53,13 +56,25 @@ pthread_t * HopsEventAPI::GetPthreadIdArray(int *_ptrSize) {
 	return m_ptrThreadArray;
 }
 
-//TODO are you sure that stopping thread return nothing?
-void HopsEventAPI::StopAllDispatchingThreads() {
-	for (int i = 0; i < m_iTotalThreads; ++i) {
-		m_ptrJNIDispatcher[i]->StopProcessorThread();
+void HopsEventAPI::dropEvents() {
+	if (m_bAPIInitialized) {
+		// first stop pooling from db, dont get any events from ndb buffer
+		m_ptrEventThread->StopEventThread();
+		sleep(2);
+		// first drop all the events
+		m_ptrEventThread->DropEvents();
+		//cancel all the dispatcher threads
+		for (int i = 0; i < m_iTotalThreads; ++i) {
+			m_ptrJNIDispatcher[i]->StopDispatcher();
+			delete m_ptrJNIDispatcher[i];
+		}
+		//finally cancel the event thread
+		m_ptrEventThread->CancelEventThread();
+		delete m_ptrEventThread;
 	}
 }
-void HopsEventAPI::initAPI(JavaVM *_ptrJVM,HopsConfigFile *_ptrConf) {
+void HopsEventAPI::initAPI(JavaVM *_ptrJVM, HopsConfigFile *_ptrConf) {
+
 	char **pEventTableNameArray;
 
 	char l_zConfigReaderArray[1024];
@@ -77,7 +92,8 @@ void HopsEventAPI::initAPI(JavaVM *_ptrJVM,HopsConfigFile *_ptrConf) {
 	m_iTotalThreads = (int) atoi(_ptrConf->GetValue("PROCESSING_THREADS"));
 	m_iMaxEventBufferSize = (int) atoi(_ptrConf->GetValue("MAX_EVENT_BUFFER"));
 	int l_iEventType = (int) atoi(_ptrConf->GetValue("EVENT_TYPE"));
-	int l_iTotalNoOfColumn = (int) atoi(_ptrConf->GetValue("TOTAL_NO_OF_COLUMN"));
+	int l_iTotalNoOfColumn = (int) atoi(
+			_ptrConf->GetValue("TOTAL_NO_OF_COLUMN"));
 
 	// event receiving thread plus total number of thread
 	m_ptrThreadArray = new pthread_t[m_iTotalThreads + 1];
@@ -188,7 +204,7 @@ void HopsEventAPI::initAPI(JavaVM *_ptrJVM,HopsConfigFile *_ptrConf) {
 	if (m_iTotalThreads == 1) {
 		m_ptrJNIDispatcher[0]->SetSingleThread(true);
 		l_pthreadId = m_ptrJNIDispatcher[0]->StartEventProcessor(
-				m_ptrJNIDispatcher[0], NULL, NULL,_ptrConf);
+				m_ptrJNIDispatcher[0], NULL, NULL, _ptrConf);
 		m_ptrThreadArray[0] = l_pthreadId;
 	} else {
 		ThreadToken **l_ptrThreadToken = new ThreadToken *[m_iTotalThreads];
@@ -197,11 +213,11 @@ void HopsEventAPI::initAPI(JavaVM *_ptrJVM,HopsConfigFile *_ptrConf) {
 			if (j == m_iTotalThreads - 1) {
 				l_pthreadId = m_ptrJNIDispatcher[j]->StartEventProcessor(
 						m_ptrJNIDispatcher[j], m_ptrJNIDispatcher[0],
-						l_ptrThreadToken[j],_ptrConf);
+						l_ptrThreadToken[j], _ptrConf);
 			} else {
 				l_pthreadId = m_ptrJNIDispatcher[j]->StartEventProcessor(
 						m_ptrJNIDispatcher[j], m_ptrJNIDispatcher[j + 1],
-						l_ptrThreadToken[j],_ptrConf);
+						l_ptrThreadToken[j], _ptrConf);
 			}
 			m_ptrThreadArray[j] = l_pthreadId;
 			// Give some time to attach previous thread and start next one
@@ -213,17 +229,19 @@ void HopsEventAPI::initAPI(JavaVM *_ptrJVM,HopsConfigFile *_ptrConf) {
 
 	sleep(2);
 
-	HopsEventThread::Instance()->InintEventThread(cluster_connection,
-			m_ptrProcessingQ, m_iMaxEventBufferSize, l_iEventType,
-			m_ptrCondtionLock, m_iTotalThreads, m_iSingleContainerSize);
-	HopsEventThread::Instance()->setDatabaseNameAndNoOfTable(l_zNdbDatabaseName,
+	m_ptrEventThread = new HopsEventThread();
+	m_ptrEventThread->InintEventThread(cluster_connection, m_ptrProcessingQ,
+			m_iMaxEventBufferSize, l_iEventType, m_ptrCondtionLock,
+			m_iTotalThreads, m_iSingleContainerSize);
+	m_ptrEventThread->setDatabaseNameAndNoOfTable(l_zNdbDatabaseName,
 			l_oTablesSep.GetCount());
-	HopsEventThread::Instance()->setEventColArray(l_arrayEvent,
-			pEventTableNameArray, pEventArray);
-	HopsEventThread::Instance()->subscribeEvents();
+	m_ptrEventThread->setEventColArray(l_arrayEvent, pEventTableNameArray,
+			pEventArray);
+	m_ptrEventThread->subscribeEvents();
 
-	l_pthreadId = HopsEventThread::Instance()->StartEventThread();
+	l_pthreadId = m_ptrEventThread->StartEventThread(m_ptrEventThread);
 	m_ptrThreadArray[m_iTotalThreads] = l_pthreadId;
+	m_bAPIInitialized = true;
 
 }
 

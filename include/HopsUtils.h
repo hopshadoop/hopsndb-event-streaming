@@ -96,7 +96,7 @@ namespace hops
 			HopsEventStreamingTimer();
 			HopsEventStreamingTimer(int _iThreadSleepInterval,bool _isThisMilliSleep);
 			unsigned long long GetMonotonicTime();
-			char * GetUniqString();
+			char * GetUniqString(int _iSuffix);
 			unsigned long long GetEpochTime();
 			char * GetCurrentTimeStamp();
 			~HopsEventStreamingTimer();

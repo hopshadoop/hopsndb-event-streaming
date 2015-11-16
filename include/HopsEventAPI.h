@@ -26,7 +26,7 @@ public:
 	~HopsEventAPI();
 	void initAPI(JavaVM *_ptrJVM,HopsConfigFile *_ptrConf);
 	pthread_t * GetPthreadIdArray(int *_ptrSize);
-	void StopAllDispatchingThreads();
+	void dropEvents();
 private:
 	HopsEventAPI();  // Private so that it can  not be called
 	static HopsEventAPI* m_pInstance;
@@ -38,7 +38,9 @@ private:
 	int m_iMaxEventBufferSize;
 	QueueSizeCondition **m_ptrCondtionLock;
 	HopsJNIDispatcher **m_ptrJNIDispatcher;
+	HopsEventThread *m_ptrEventThread;
 	int m_iSingleContainerSize;
+	bool m_bAPIInitialized;
 };
 
 #endif /* HOPSEVENTAPI_H_ */

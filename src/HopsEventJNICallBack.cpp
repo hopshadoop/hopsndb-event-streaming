@@ -19,6 +19,7 @@ static JavaVM *g_ptrGlobalJVM;
 static JNIEnv *g_ptrGlobalJniEnv;
 HopsEventStreamingTimer *g_EventStreamingTimer;
 
+// close event api session is still in testing
 JNIEXPORT void JNICALL Java_io_hops_metadata_ndb_JniNdbEventStreaming_closeEventAPISession(
 		JNIEnv *env, jobject thisObj) {
 	int l_iThreadArraySize = 0;
@@ -29,27 +30,21 @@ JNIEXPORT void JNICALL Java_io_hops_metadata_ndb_JniNdbEventStreaming_closeEvent
 				l_pThradArray[i]);
 	}
 
-	//HopsEventAPI::Instance()->StopAllDispatchingThreads();
-	//ConditionLock::Instance()->IncrementTheCounter(-1);
 
-	sleep(1);
-
-	HopsEventThread::Instance()->StopEventThread();
-	sleep(1);
-	//lets delete the eventapi instance
-	delete HopsEventAPI::Instance();
 }
 
 JNIEXPORT void JNICALL Java_io_hops_metadata_ndb_JniNdbEventStreaming_startEventAPISession(
 		JNIEnv *env, jobject thisObj, jint isLeader) {
 
-	HopsConfigFile *l_ptrCFile=NULL;
+	HopsConfigFile *l_ptrCFile = NULL;
 	if (isLeader == 1) {
 		//load the rm configuarion file
+		printf("[EventAPI] !!!! Loading RM configuration <This is a leader node> \n");
 		l_ptrCFile = new HopsConfigFile(RM_EVENT_API_CONFIG);
-		HopsEventThread::Instance()->dropEvents();
+		HopsEventAPI::Instance()->dropEvents();
 	} else {
 		// load the rt configuration file
+		printf("[EventAPI] !!!! Loading RT configuration <This is a non-leader node> \n");
 		l_ptrCFile = new HopsConfigFile(RT_EVENT_API_CONFIG);
 	}
 	int status = env->GetJavaVM(&g_ptrGlobalJVM);
@@ -61,7 +56,6 @@ JNIEXPORT void JNICALL Java_io_hops_metadata_ndb_JniNdbEventStreaming_startEvent
 		exit(EXIT_FAILURE);
 	}
 
-
 	bool l_bIsLoadSimulationEnbled =
 			((int) atoi(l_ptrCFile->GetValue("LOAD_SIMULATION_ENABLED"))) == 1 ?
 					true : false;
@@ -70,12 +64,12 @@ JNIEXPORT void JNICALL Java_io_hops_metadata_ndb_JniNdbEventStreaming_startEvent
 				"[JNI][%s] ###################### Starting the Load simulation EventAPI and native methods ####################\n",
 				l_ptrTimeStamp);
 		HopsLoadSimulationEventAPI::Instance()->LoadSimulationInitAPI(
-				g_ptrGlobalJVM,l_ptrCFile);
+				g_ptrGlobalJVM, l_ptrCFile);
 	} else {
 		printf(
 				"[JNI][%s] ###################### Starting the  EventAPI and native methods ####################\n",
 				l_ptrTimeStamp);
-		HopsEventAPI::Instance()->initAPI(g_ptrGlobalJVM,l_ptrCFile);
+		HopsEventAPI::Instance()->initAPI(g_ptrGlobalJVM, l_ptrCFile);
 	}
 	printf(
 			"[JNI][%s] ################## Initialization done , now starting callback ##################\n",

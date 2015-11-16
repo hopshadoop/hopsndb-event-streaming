@@ -45,6 +45,7 @@ public:
 	inline bool isThisSingleThread() {
 		return m_isSingleThread;
 	}
+	void StopDispatcher();
 private:
 
 	bool IsMyPredecessorProcessed();
