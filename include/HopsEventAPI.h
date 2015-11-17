@@ -25,7 +25,6 @@ public:
 	static HopsEventAPI* Instance();
 	~HopsEventAPI();
 	void initAPI(JavaVM *_ptrJVM,HopsConfigFile *_ptrConf);
-	pthread_t * GetPthreadIdArray(int *_ptrSize);
 	void dropEvents();
 private:
 	HopsEventAPI();  // Private so that it can  not be called

@@ -136,8 +136,6 @@ void HopsNdbJNIContainersObject::AddingToMapList(int _iKey, jobject _oValue) {
 				_oValue);
 		m_cplusplusmapformaplist.insert(
 				std::make_pair<int, jobject>(_iKey, l_jObjArrayList));
-		std::cout << "creating key : " << _iKey << " | object refefnce : "
-				<< l_jObjArrayList << std::endl;
 	} else {
 		m_jniPtr->CallObjectMethod(m_cplusplusmapformaplist[_iKey],
 				mMethodOfArrayListAdd, _oValue);
@@ -503,7 +501,7 @@ void HopObject::BuildHopJavaObject(vector<NdbValues> & _refNdbValues) {
 			break;
 		default: {
 			printf(
-					"[HopObject] Unknown Ndb data type received , Setting Java oject to null -data type: %d\n",
+					"[HopObject] Unknown Ndb data type received , Setting Java object to null -data type: %d\n",
 					_refNdbValues[i].getDataType());
 			m_jniPtr->CallVoidMethod(m_callbackCalssObject, l_javaMethod,
 			NULL);
@@ -545,7 +543,7 @@ void HopObject::SimulationBuildHopJavaObject(
 
 		default: {
 			printf(
-					"[HopObject] Unknown Ndb data type received , Setting Java oject to null -data type: %d\n",
+					"[HopObject] Unknown Ndb data type received , Setting Java object to null -data type: %d\n",
 					_refNdbValues[i].getDataType());
 			m_jniPtr->CallVoidMethod(m_callbackCalssObject, l_javaMethod,
 			NULL);

@@ -51,11 +51,6 @@ HopsEventAPI::~HopsEventAPI() {
 	delete m_ptrEventThread;
 }
 
-pthread_t * HopsEventAPI::GetPthreadIdArray(int *_ptrSize) {
-	*_ptrSize = m_iTotalThreads + 1;
-	return m_ptrThreadArray;
-}
-
 void HopsEventAPI::dropEvents() {
 	if (m_bAPIInitialized) {
 		// first stop pooling from db, dont get any events from ndb buffer

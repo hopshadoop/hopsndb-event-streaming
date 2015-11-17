@@ -22,14 +22,8 @@ HopsEventStreamingTimer *g_EventStreamingTimer;
 // close event api session is still in testing
 JNIEXPORT void JNICALL Java_io_hops_metadata_ndb_JniNdbEventStreaming_closeEventAPISession(
 		JNIEnv *env, jobject thisObj) {
-	int l_iThreadArraySize = 0;
-	pthread_t *l_pThradArray = HopsEventAPI::Instance()->GetPthreadIdArray(
-			&l_iThreadArraySize);
-	for (int i = 0; i < l_iThreadArraySize; ++i) {
-		printf("[EventAPI] ########## Stopping thread ids - %ld\n",
-				l_pThradArray[i]);
-	}
-
+	//this will stop all the threads and delete the instances
+	HopsEventAPI::Instance()->dropEvents();
 
 }
 

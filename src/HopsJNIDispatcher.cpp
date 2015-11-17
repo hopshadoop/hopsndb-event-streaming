@@ -628,6 +628,7 @@ void HopsJNIDispatcher::ClearBatchMemory() {
 		// check whether we have any objects inside the vector array.
 		for (; l_innermapItr != m_mapOfBTObjectsItr->second.end();
 				++l_innermapItr) {
+			//don't iterate if vector size is 0
 			if (l_innermapItr->second.size()) {
 				//unwanted objects. remove them
 				for (int i = 0; i < (int) l_innermapItr->second.size(); ++i) {
